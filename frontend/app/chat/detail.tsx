@@ -1,10 +1,13 @@
 import React, { useEffect, useState, useRef, useCallback, memo } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import Svg, { Circle } from 'react-native-svg';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { get, post } from '@/services/api';
 import { useSocket } from '@/contexts/SocketContext';
+import { useCall } from '@/contexts/CallContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface Message {
@@ -108,6 +111,13 @@ export default function ChatDetailScreen() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [otherUserTyping, setOtherUserTyping] = useState(false);
   const [otherUserStatus, setOtherUserStatus] = useState<{ isOnline: boolean; lastSeen: string | null }>({ isOnline: false, lastSeen: null });
+  
+  // Call Gesture State
+  const [isHoldingTop, setIsHoldingTop] = useState(false);
+  const [callProgress, setCallProgress] = useState(0);
+  const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const holdStartTimeRef = useRef<number>(0);
+
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
@@ -119,6 +129,9 @@ export default function ChatDetailScreen() {
   
   // Use shared socket and conversations from context
   const { socket, isConnected: socketConnected, setConversations, updateConversation, setActiveChatId } = useSocket();
+
+  // Call Context connection
+  const { initiateCall } = useCall();
 
   // Use refs to avoid dependency issues in socket listeners
   const currentUserIdRef = useRef<string | null>(null);
@@ -551,15 +564,70 @@ export default function ChatDetailScreen() {
     await fetchMessages(true);
   }, [loadingMore, hasMore, oldestMessageId, fetchMessages]);
 
-  // Handle scroll to detect when user wants to load more (scrolling to top in inverted list)
+  // Handle scroll to detect when user wants to load more, AND the scroll-and-hold calling gesture
   const handleScroll = useCallback((event: any) => {
     const offsetY = event.nativeEvent.contentOffset.y;
-    // In inverted FlatList, scrolling to top means offsetY becomes more negative
-    // When user scrolls near the "top" (which is actually the bottom visually), load more
-    if (offsetY > 100 && hasMore && !loadingMore) {
+    
+    // In inverted FlatList, scrolling to "top" (oldest messages) means offsetY becomes more negative
+    // (Actually depending on React Native version, Y could be highly positive or highly negative. Let's trace it)
+    // When user scrolls very close to the top edge (newest messages in inverted list are at 0):
+    // Wait, the user said "scroll up through oldest of chat". 
+    // In an inverted list, oldest messages are at the BOTTOM visually (highest Y offset).
+    // Let's trigger when they hit the absolute bottom (max offset) and pull further.
+    
+    const contentHeight = event.nativeEvent.contentSize.height;
+    const layoutHeight = event.nativeEvent.layoutMeasurement.height;
+    const maxOffset = contentHeight - layoutHeight;
+    
+    // Load more logic (approaching bottom)
+    if (offsetY > maxOffset - 100 && hasMore && !loadingMore) {
       loadMoreMessages();
     }
-  }, [hasMore, loadingMore, loadMoreMessages]);
+    
+    // Pull-to-call logic (pulling past max offset)
+    // Only allow if we loaded all messages (!hasMore) or we just decide they can call anytime they over-scroll the current top.
+    if (offsetY > maxOffset + 30) {
+      if (!isHoldingTop) {
+        setIsHoldingTop(true);
+        holdStartTimeRef.current = Date.now();
+        
+        if (!callTimerRef.current) {
+          callTimerRef.current = setInterval(() => {
+            const elapsed = Date.now() - holdStartTimeRef.current;
+            const progress = Math.min(elapsed / 2000, 1); // 2 seconds
+            setCallProgress(progress);
+            
+            if (progress >= 1) {
+              // Trigger Call!
+              if (callTimerRef.current) clearInterval(callTimerRef.current);
+              callTimerRef.current = null;
+              setIsHoldingTop(false);
+              setCallProgress(0);
+              triggerCall();
+            }
+          }, 50); // 20fps update
+        }
+      }
+    } else {
+      // Cancel hold
+      if (isHoldingTop) {
+        setIsHoldingTop(false);
+        setCallProgress(0);
+        if (callTimerRef.current) {
+          clearInterval(callTimerRef.current);
+          callTimerRef.current = null;
+        }
+      }
+    }
+  }, [hasMore, loadingMore, loadMoreMessages, isHoldingTop]);
+
+  const triggerCall = () => {
+    if (otherUserId && chatId) {
+      initiateCall([otherUserId], chatId);
+    } else {
+      Alert.alert("Error", "Cannot initiate call right now.");
+    }
+  };
 
   const renderItem = useCallback(({ item }: { item: ListItem }) => (
     <MessageItem 
@@ -585,6 +653,40 @@ export default function ChatDetailScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={90}
     >
+      {/* Call hover animation overlay */}
+      {isHoldingTop && (
+        <View style={styles.callHoverContainer}>
+          <View style={styles.callIconWrapper}>
+            <Svg width="80" height="80" viewBox="0 0 80 80" style={styles.circularProgress}>
+              <Circle
+                cx="40"
+                cy="40"
+                r="36"
+                stroke="#333"
+                strokeWidth="4"
+                fill="none"
+              />
+              <Circle
+                cx="40"
+                cy="40"
+                r="36"
+                stroke="#4ADDAE"
+                strokeWidth="4"
+                fill="none"
+                strokeDasharray={`${2 * Math.PI * 36}`}
+                strokeDashoffset={`${2 * Math.PI * 36 * (1 - callProgress)}`}
+                strokeLinecap="round"
+                transform="rotate(-90 40 40)"
+              />
+            </Svg>
+            <Ionicons name="call" size={32} color={callProgress >= 1 ? "#4ADDAE" : "#fff"} />
+          </View>
+          <Text style={styles.callHoverText}>
+            {callProgress >= 1 ? "Calling..." : "Hold to Call"}
+          </Text>
+        </View>
+      )}
+
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButtonContainer}>
           <Text style={styles.backButton}>←</Text>
@@ -612,7 +714,9 @@ export default function ChatDetailScreen() {
         maxToRenderPerBatch={10}
         windowSize={10}
         removeClippedSubviews={Platform.OS === 'android'}
-        onEndReached={loadMoreMessages}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        onEndReached={hasMore && !loadingMore && messages.length > 0 ? loadMoreMessages : null}
         onEndReachedThreshold={0.5}
         ListHeaderComponent={renderHeader}
       />
@@ -810,6 +914,37 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 14,
+  },
+  callHoverContainer: {
+    position: 'absolute',
+    top: 100,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 100,
+    pointerEvents: 'none',
+  },
+  callIconWrapper: {
+    width: 80,
+    height: 80,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 40,
+  },
+  circularProgress: {
+    position: 'absolute',
+  },
+  callHoverText: {
+    color: '#fff',
+    marginTop: 12,
+    fontWeight: 'bold',
+    fontSize: 14,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    borderRadius: 12,
+    overflow: 'hidden',
   },
   sendButtonTextDisabled: {
     color: '#8b9a9f',
