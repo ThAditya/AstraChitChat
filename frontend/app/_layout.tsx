@@ -8,6 +8,8 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { SocketProvider } from '@/contexts/SocketContext';
+import { CallProvider } from '@/contexts/CallContext';
+import CallOverlay from '@/components/CallOverlay';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -45,13 +47,16 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <SocketProvider>
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-          <Stack.Screen name="auth/login" options={{ headerShown: false }} />
-          <Stack.Screen name="auth/signup" options={{ headerShown: false }} />
-        </Stack>
-        <StatusBar style="auto" />
+        <CallProvider>
+          <Stack>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+            <Stack.Screen name="auth/login" options={{ headerShown: false }} />
+            <Stack.Screen name="auth/signup" options={{ headerShown: false }} />
+          </Stack>
+          <CallOverlay />
+          <StatusBar style="auto" />
+        </CallProvider>
       </SocketProvider>
     </ThemeProvider>
   );

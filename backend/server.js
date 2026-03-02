@@ -241,6 +241,46 @@ io.on('connection', (socket) => {
         }
     });
 
+    // ========================================================================
+    // WEBRTC SIGNALING FOR AUDIO CALLS
+    // ========================================================================
+
+    // Handle incoming WebRTC offer
+    socket.on('webrtc-offer', (data) => {
+        // data expects: { targetId, offer, callerId, chatId }
+        socket.to(data.targetId).emit('webrtc-offer', {
+            offer: data.offer,
+            callerId: data.callerId,
+            chatId: data.chatId
+        });
+    });
+
+    // Handle incoming WebRTC answer
+    socket.on('webrtc-answer', (data) => {
+        // data expects: { targetId, answer, responderId }
+        socket.to(data.targetId).emit('webrtc-answer', {
+            answer: data.answer,
+            responderId: data.responderId
+        });
+    });
+
+    // Handle incoming ICE Candidate for WebRTC
+    socket.on('webrtc-candidate', (data) => {
+        // data expects: { targetId, candidate, senderId }
+        socket.to(data.targetId).emit('webrtc-candidate', {
+            candidate: data.candidate,
+            senderId: data.senderId
+        });
+    });
+
+    // Handle ending or declining a call
+    socket.on('end-call', (data) => {
+        // data expects: { targetId, senderId }
+        socket.to(data.targetId).emit('end-call', {
+            senderId: data.senderId
+        });
+    });
+
     // Handle disconnect
     socket.on('disconnect', async () => {
         console.log('User disconnected');
