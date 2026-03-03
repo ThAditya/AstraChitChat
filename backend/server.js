@@ -248,6 +248,7 @@ io.on('connection', (socket) => {
     // Handle incoming WebRTC offer
     socket.on('webrtc-offer', (data) => {
         // data expects: { targetId, offer, callerId, chatId }
+        console.log('Forwarding webrtc-offer to:', data.targetId);
         socket.to(data.targetId).emit('webrtc-offer', {
             offer: data.offer,
             callerId: data.callerId,
@@ -258,6 +259,7 @@ io.on('connection', (socket) => {
     // Handle incoming WebRTC answer
     socket.on('webrtc-answer', (data) => {
         // data expects: { targetId, answer, responderId }
+        console.log('Forwarding webrtc-answer to:', data.targetId);
         socket.to(data.targetId).emit('webrtc-answer', {
             answer: data.answer,
             responderId: data.responderId
@@ -267,6 +269,7 @@ io.on('connection', (socket) => {
     // Handle incoming ICE Candidate for WebRTC
     socket.on('webrtc-candidate', (data) => {
         // data expects: { targetId, candidate, senderId }
+        console.log('Forwarding webrtc-candidate to:', data.targetId);
         socket.to(data.targetId).emit('webrtc-candidate', {
             candidate: data.candidate,
             senderId: data.senderId
