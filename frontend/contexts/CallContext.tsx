@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { PermissionsAndroid, Platform } from 'react-native';
 import { RTCPeerConnection, RTCSessionDescription, RTCIceCandidate, mediaDevices, MediaStream } from 'react-native-webrtc';
 import { useSocket } from './SocketContext';
 
@@ -14,12 +15,13 @@ interface CallState {
 }
 
 interface CallContextType extends CallState {
-  initiateCall: (targetIds: string[], chatId: string) => Promise<void>;
-  acceptCall: () => Promise<void>;
+  initiateCall: (targetIds: string[], chatId: string, isVideo?: boolean) => Promise<void>;
+  acceptCall: (isVideo?: boolean) => Promise<void>;
   declineCall: () => void;
   endCall: () => void;
   toggleMute: () => void;
   toggleSpeaker: () => void;
+  toggleVideo: () => void;
 }
 
 const CallContext = createContext<CallContextType | null>(null);
@@ -92,7 +94,36 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [socket, currentUserId, callState.isCalling]);
 
+  const requestMicrophonePermission = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+          {
+            title: 'Microphone Permission',
+            message: 'App needs access to your microphone so you can make audio calls.',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          }
+        );
+        return granted === PermissionsAndroid.RESULTS.GRANTED;
+      } catch (err) {
+        console.warn(err);
+        return false;
+      }
+    }
+    return true;
+  };
+
   const setupMediaAndPC = async (targetId: string): Promise<RTCPeerConnection> => {
+    // 0. Request Microphone Permissions
+    const hasPermission = await requestMicrophonePermission();
+    if (!hasPermission) {
+      console.error('Microphone permission denied');
+      throw new Error('Microphone permission denied');
+    }
+
     // 1. Get Local Microphone Stream
     const stream = await mediaDevices.getUserMedia({
       audio: true,
@@ -135,8 +166,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('WebRTC Connection State:', pc.connectionState);
       if (pc.connectionState === 'connected') {
         setCallState(prev => ({ ...prev, isConnected: true }));
-      } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-        cleanupCall();
+      } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+        cleanupCall('connection failed');
+      } else if (pc.connectionState === 'closed') {
+        cleanupCall('connection closed');
       }
     };
 
@@ -216,15 +249,28 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     cleanupCall();
   };
 
-  const cleanupCall = useCallback(() => {
-    if (peerConnectionRef.current) {
-      peerConnectionRef.current.close();
+  const cleanupCall = useCallback((reason?: string) => {
+    console.log('cleanupCall called:', reason || 'unknown');
+    // Use refs to prevent race conditions during cleanup
+    const pc = peerConnectionRef.current;
+    const streamRef = callState.localStream;
+    
+    if (pc) {
+      console.log('Closing peer connection');
+      pc.close();
       peerConnectionRef.current = null;
     }
     
+    // Clear refs first
+    activeCallTargetIdRef.current = null;
+    
+    // Then update state - use functional update to avoid dependency issues
     setCallState(prev => {
-      if (prev.localStream) {
-        prev.localStream.getTracks().forEach(t => t.stop());
+      // Stop tracks if they exist in the state or in our captured ref
+      const streamToCleanup = streamRef || prev.localStream;
+      if (streamToCleanup) {
+        console.log('Stopping tracks');
+        streamToCleanup.getTracks().forEach(t => t.stop());
       }
       return {
         isCalling: false,
@@ -237,18 +283,17 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         activeChatId: null
       };
     });
-    
-    activeCallTargetIdRef.current = null;
-  }, []);
+  }, []); // Empty deps - use refs for values
 
   const toggleMute = () => {
     setCallState(prev => {
+      const newIsMuted = !prev.isMuted;
       if (prev.localStream) {
         prev.localStream.getAudioTracks().forEach(track => {
-          track.enabled = prev.isMuted; // If currently muted, we enable it.
+          track.enabled = !newIsMuted; // If we want to mute, we disable the track
         });
       }
-      return { ...prev, isMuted: !prev.isMuted };
+      return { ...prev, isMuted: newIsMuted };
     });
   };
 
@@ -259,6 +304,18 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCallState(prev => ({ ...prev, isSpeaker: !prev.isSpeaker }));
   };
 
+  const toggleVideo = () => {
+    setCallState(prev => {
+      const newIsVideoOn = !prev.localStream?.getVideoTracks().some(track => track.enabled);
+      if (prev.localStream) {
+        prev.localStream.getVideoTracks().forEach(track => {
+          track.enabled = newIsVideoOn;
+        });
+      }
+      return prev;
+    });
+  };
+
   return (
     <CallContext.Provider value={{
       ...callState,
@@ -267,7 +324,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       declineCall,
       endCall,
       toggleMute,
-      toggleSpeaker
+      toggleSpeaker,
+      toggleVideo
     }}>
       {children}
     </CallContext.Provider>
