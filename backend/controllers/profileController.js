@@ -2,6 +2,7 @@ const User = require('../models/User');
 const Post = require('../models/Post');
 const Follow = require('../models/Follow');
 const Like = require('../models/Like');
+const { getPresignedUploadUrl } = require('../services/mediaService');
 
 // @desc    Get current user's profile
 // @route   GET /api/profile/me
@@ -135,4 +136,39 @@ const updateUserProfile = async (req, res) => {
     }
 };
 
-module.exports = { getUserProfile, getUserProfileById, updateUserProfile };
+// @desc    Get a presigned URL for profile picture upload
+// @route   GET /api/profile/avatar-upload-url
+// @access  Private
+//
+// Client flow:
+//   1. GET /api/profile/avatar-upload-url?fileType=image/jpeg
+//   2. PUT <presignedUrl> with the image binary
+//   3. PUT /api/profile/me with { profilePicture: cloudfrontUrl }
+const getAvatarUploadUrl = async (req, res) => {
+    const { fileType } = req.query;
+
+    if (!fileType) {
+        return res.status(400).json({ message: 'fileType query param is required (e.g. image/jpeg).' });
+    }
+
+    const allowedImageTypes = /^image\/(jpeg|jpg|png|webp)$/;
+    if (!allowedImageTypes.test(fileType)) {
+        return res.status(400).json({ message: 'Only JPEG, PNG, or WebP images are supported for avatars.' });
+    }
+
+    try {
+        const ext = fileType.split('/')[1];
+        const { presignedUrl, key, cloudfrontUrl } = await getPresignedUploadUrl(
+            req.user._id.toString(),
+            `avatar.${ext}`,
+            fileType,
+            300 // 5 minutes
+        );
+
+        res.json({ presignedUrl, key, cloudfrontUrl });
+    } catch (err) {
+        res.status(500).json({ message: 'Could not generate avatar upload URL.', error: err.message });
+    }
+};
+
+module.exports = { getUserProfile, getUserProfileById, updateUserProfile, getAvatarUploadUrl };

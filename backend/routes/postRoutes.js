@@ -1,6 +1,7 @@
 const express = require('express');
 const {
   createPost,
+  deletePost,
   getFeedPosts,
   getShortVideos,
   getUserPosts
@@ -16,6 +17,7 @@ router.post('/upload', protect, createPost);
 router.get('/feed', protect, getFeedPosts);
 router.get('/flicks', protect, getShortVideos);
 router.get('/me', protect, getUserPosts);
+router.delete('/:postId', protect, deletePost);
 
 // Like routes
 router.post('/:postId/like', protect, likePost);

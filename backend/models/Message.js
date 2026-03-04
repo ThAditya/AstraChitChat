@@ -27,6 +27,10 @@ const messageSchema = new mongoose.Schema({
     mediaUrl: {
         type: String
     },
+    // S3 object key — needed to delete the file from S3 when the message is removed
+    mediaKey: {
+        type: String
+    },
     mediaMime: {
         type: String
     },
@@ -103,6 +107,10 @@ const messageSchema = new mongoose.Schema({
         url: {
             type: String,
             required: true
+        },
+        // S3 object key for this attachment — enables targeted deletion
+        key: {
+            type: String
         },
         filename: {
             type: String
