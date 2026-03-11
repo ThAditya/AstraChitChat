@@ -511,6 +511,16 @@ export default function ChatDetailScreen() {
     if (!newMessage.trim() || !currentUserId || !socket || !socketConnected) return;
 
     try {
+      // Create temporary message ID for optimistic UI
+      const tempId = `temp_${Date.now()}`;
+      
+      // Store the quoted message data for immediate display
+      const quotedMsgData = quotedMessage ? {
+        _id: quotedMessage._id,
+        bodyText: quotedMessage.bodyText || quotedMessage.content,
+        sender: quotedMessage.sender
+      } : null;
+
       const messageData: any = {
         sender: currentUserId,
         receiver: otherUserId,
@@ -526,6 +536,34 @@ export default function ChatDetailScreen() {
       }
 
       socket.emit('new message', messageData);
+
+      // Immediately add message to local state with quotedMessage for instant display
+      const newMsg = {
+        _id: tempId,
+        sender: {
+          _id: currentUserId,
+          username: 'You',
+          profilePicture: ''
+        },
+        receiver: {
+          _id: otherUserId,
+          username: otherUsername,
+          profilePicture: ''
+        },
+        chat: chatId,
+        msgType: 'text',
+        bodyText: newMessage.trim(),
+        content: newMessage.trim(),
+        createdAt: new Date().toISOString(),
+        readBy: [currentUserId],
+        deliveredTo: [currentUserId],
+        quotedMsgId: quotedMessage ? quotedMessage._id : undefined,
+        quotedMessage: quotedMsgData
+      };
+      
+      // Add message to local state immediately
+      setMessages(prev => [...prev, newMsg]);
+      messageIdsRef.current.add(tempId);
 
       // Clear quoted message after sending
       setQuotedMessage(null);
