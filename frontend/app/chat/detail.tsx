@@ -1,9 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback, memo } from 'react';
-<<<<<<< HEAD
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform } from 'react-native';
-=======
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform, PanResponder, Animated } from 'react-native';
->>>>>>> upstream/master
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
@@ -13,10 +9,7 @@ import { get, post } from '@/services/api';
 import { useSocket } from '@/contexts/SocketContext';
 import { useCall } from '@/contexts/CallContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-<<<<<<< HEAD
-=======
 import SwipeableMessage from '@/components/SwipeableMessage';
->>>>>>> upstream/master
 
 interface Message {
   _id: string;
@@ -63,22 +56,15 @@ type ListItem =
 const MessageItem = memo(({ 
   item, 
   currentUserId,
-<<<<<<< HEAD
-  isMessageRead
-=======
   isMessageRead,
   onLongPress,
   onSwipeReply
->>>>>>> upstream/master
 }: { 
   item: ListItem; 
   currentUserId: string | null;
   isMessageRead: (message: Message, currentId: string | null) => boolean;
-<<<<<<< HEAD
-=======
   onLongPress?: (message: Message) => void;
   onSwipeReply?: (message: Message) => void;
->>>>>>> upstream/master
 }) => {
   if (item.type === 'dateSeparator') {
     return (
@@ -97,35 +83,6 @@ const MessageItem = memo(({
 
   const isGroupChat = typeof message.chat === 'object' ? message.chat?.convoType === 'group' : false;
 
-<<<<<<< HEAD
-  return (
-    <View style={[styles.messageContainer, isOwnMessage ? styles.ownMessage : styles.otherMessage]}>
-      {!isOwnMessage && message.sender?.username && (
-        <Text style={styles.senderNameText}>{message.sender.username}</Text>
-      )}
-      <Text style={[styles.messageText, isOwnMessage ? styles.ownMessageText : styles.otherMessageText]}>
-        {message.unsentAt ? '[Message unsent]' : (message.bodyText || message.content)}
-      </Text>
-      {message.editedAt && !message.unsentAt && (
-        <Text style={[styles.editedText, isOwnMessage ? styles.ownEditedText : styles.otherEditedText]}>
-          (edited)
-        </Text>
-      )}
-      <View style={styles.timestampContainer}>
-        <Text style={[styles.timestamp, isOwnMessage ? styles.ownTimestamp : styles.otherTimestamp]}>
-          {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </Text>
-        {isOwnMessage && (
-          <Text style={[
-            styles.readStatus, 
-            isRead ? styles.readStatusBlue : styles.readStatusGray
-          ]}>
-            {isRead ? '✓✓' : (isDelivered ? '✓✓' : '✓')}
-          </Text>
-        )}
-      </View>
-    </View>
-=======
   // Handle swipe to reply
   const handleSwipe = useCallback(() => {
     onSwipeReply?.(message);
@@ -181,7 +138,6 @@ const MessageItem = memo(({
         </View>
       </TouchableOpacity>
     </SwipeableMessage>
->>>>>>> upstream/master
   );
 });
 
@@ -197,18 +153,15 @@ export default function ChatDetailScreen() {
   const [otherUserTyping, setOtherUserTyping] = useState(false);
   const [otherUserStatus, setOtherUserStatus] = useState<{ isOnline: boolean; lastSeen: string | null }>({ isOnline: false, lastSeen: null });
   
-<<<<<<< HEAD
   // Call Gesture State
   const [isHoldingTop, setIsHoldingTop] = useState(false);
   const [callProgress, setCallProgress] = useState(0);
   const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const holdStartTimeRef = useRef<number>(0);
 
-=======
   // Reply/Quote feature state
   const [quotedMessage, setQuotedMessage] = useState<Message | null>(null);
   
->>>>>>> upstream/master
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
@@ -318,12 +271,9 @@ export default function ChatDetailScreen() {
   // Initialize and set up socket listeners
   useEffect(() => {
     const init = async () => {
-      // Clear previous message IDs when entering a new chat ONLY if we're actually clearing messages
       messageIdsRef.current.clear();
       setMessages([]);
-      // Do not set loading to true here to avoid the aggressive spinner blocking the UI mount
       setGroupedMessages([]);
-      // Reset pagination state
       setHasMore(true);
       setOldestMessageId(null);
 
@@ -333,7 +283,6 @@ export default function ChatDetailScreen() {
       fetchMessages();
       fetchUserStatus();
 
-      // Instantly clear the unread count for this active chat in the global list
       setConversations(prev => prev.map(c => 
         String(c._id) === String(chatId) ? { ...c, unreadCount: 0 } : c
       ));
@@ -344,13 +293,10 @@ export default function ChatDetailScreen() {
     init();
     
     return () => {
-<<<<<<< HEAD
-=======
       // Clear typing timeout on unmount to prevent memory leaks
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
->>>>>>> upstream/master
       setActiveChatId(null);
     };
   }, [chatId, otherUserId, setActiveChatId]);
@@ -359,19 +305,12 @@ export default function ChatDetailScreen() {
   useEffect(() => {
     if (!socket || !chatId) return;
 
-    // Join the chat room
     socket.emit('join chat', chatId);
 
-    // ========================================================================
-    // FIX: Proper message deduplication using Set for O(1) lookup
-    // ========================================================================
     const handleMessageReceived = (message: Message) => {
-      // Get the chat ID from the message (handle both string and object)
       const messageChatId = typeof message.chat === 'object' ? message.chat?._id : message.chat;
       
-      // Only handle messages for this chat
       if (String(messageChatId) === String(chatId)) {
-        // FIX: Use Set for O(1) deduplication instead of array.some()
         const messageId = message._id;
         
         if (messageIdsRef.current.has(messageId)) {
@@ -379,11 +318,9 @@ export default function ChatDetailScreen() {
           return;
         }
         
-        // Add to set and update state
         messageIdsRef.current.add(messageId);
         
         setMessages(prev => {
-          // Double-check deduplication
           if (prev.some(m => m._id === messageId)) {
             return prev;
           }
@@ -391,19 +328,13 @@ export default function ChatDetailScreen() {
           return updated;
         });
 
-        // Auto-mark as read if the message is from the other user
         if (message.sender._id !== currentUserId) {
           markAllAsRead();
-          // Instantly clear the unread count in the global context so the list doesn't show a ghost badge
           setConversations(prev => prev.map(c => 
             String(c._id) === String(chatId) ? { ...c, unreadCount: 0 } : c
           ));
-        } else {
-          // If we sent it, we shouldn't emit delivered to ourselves since we are the sender
         }
       } else {
-        // If the message is NOT for this chat, but it IS for us, tell the server it was delivered
-        // because we received it on our device (even if we're not looking at that chat)
         if (message.sender._id !== currentUserId) {
             socket.emit('message delivered', {
                 messageId: message._id,
@@ -415,7 +346,6 @@ export default function ChatDetailScreen() {
       }
     };
 
-    // Listen for online status changes
     const handleUserOnline = (data: { userId: string; isOnline: boolean; lastSeen?: string }) => {
       if (data.userId === otherUserId) {
         setOtherUserStatus({
@@ -425,23 +355,18 @@ export default function ChatDetailScreen() {
       }
     };
 
-    // Listen for typing indicators
     const handleRemoteTyping = () => setOtherUserTyping(true);
     const handleRemoteStopTyping = () => setOtherUserTyping(false);
 
-    // Listen for real-time read receipts (Blue Ticks)
-    // Use refs to avoid stale closure issues
     const handleMessagesRead = (data?: { chatId?: string; readerId?: string }) => {
       const currentOtherUserId = otherUserIdRef.current;
       const currentUser = currentUserIdRef.current;
       
-      // Only update if the read receipt is from the other user in this chat
       if (data?.readerId && String(data.readerId) !== String(currentUser)) {
         return;
       }
       
       setMessages(prev => prev.map(m => {
-        // If it's a message we sent, and it hasn't been marked read by the other user locally yet
         if (String(m.sender._id) === String(currentUser) && 
             currentOtherUserId &&
             !m.readBy?.includes(currentOtherUserId)) {
@@ -451,13 +376,11 @@ export default function ChatDetailScreen() {
       }));
     };
 
-    // Listen for real-time delivery receipts (Double Gray Ticks)
     const handleMessageDelivered = (data?: { messageId?: string, receiverId?: string }) => {
         if (!data || !data.messageId || !data.receiverId) return;
         
         setMessages(prev => prev.map(m => {
             if (String(m._id) === String(data.messageId)) {
-                // If it doesn't already have this receiver in the delivered array, add it
                 if (!m.deliveredTo?.includes(String(data.receiverId))) {
                     return {
                         ...m,
@@ -474,10 +397,7 @@ export default function ChatDetailScreen() {
     socket.on('typing', handleRemoteTyping);
     socket.on('stop typing', handleRemoteStopTyping);
     socket.on('messages read', handleMessagesRead);
-<<<<<<< HEAD
-=======
     socket.on('message delivered', handleMessageDelivered);
->>>>>>> upstream/master
 
     return () => {
       socket.off('message received', handleMessageReceived);
@@ -502,7 +422,7 @@ export default function ChatDetailScreen() {
       if (!otherUserStatus.isOnline) {
         fetchUserStatus();
       }
-    }, 30000); // Every 30 seconds
+    }, 30000);
 
     return () => clearInterval(interval);
   }, [otherUserStatus.isOnline]);
@@ -510,12 +430,11 @@ export default function ChatDetailScreen() {
   const fetchMessages = async (isLoadMore = false) => {
     try {
       if (!isLoadMore) {
-        if (messages.length === 0) setLoading(true); // Only show spinner if we have absolutely nothing
+        if (messages.length === 0) setLoading(true);
       } else {
         setLoadingMore(true);
       }
       
-      // Build query params
       let queryParams = `limit=30`;
       if (isLoadMore && oldestMessageId) {
         queryParams += `&beforeMessageId=${oldestMessageId}`;
@@ -523,7 +442,6 @@ export default function ChatDetailScreen() {
       
       const data = await get(`/chats/${chatId}/messages?${queryParams}`);
       
-      // Initialize message IDs set with existing messages for deduplication
       if (data.messages && data.messages.length > 0) {
         data.messages.forEach((msg: Message) => {
           messageIdsRef.current.add(msg._id);
@@ -531,10 +449,8 @@ export default function ChatDetailScreen() {
       }
       
       if (isLoadMore) {
-        // Append older messages to the beginning of the array using functional update
         setMessages(prevMessages => {
           const updatedMessages = [...data.messages, ...prevMessages];
-          // Update grouped messages after state update
           setGroupedMessages(groupMessagesByDate(updatedMessages));
           return updatedMessages;
         });
@@ -543,15 +459,12 @@ export default function ChatDetailScreen() {
         setGroupedMessages(groupMessagesByDate(data.messages));
       }
       
-      // Update pagination state
       setHasMore(data.hasMore !== false);
       setOldestMessageId(data.oldestMessageId || null);
       
       if (!isLoadMore && chatId && currentUserId) {
         markAllAsRead();
         
-        // Mark all fetched messages from the other user as delivered
-        // since we just fetched them to our device
         if (data.messages && data.messages.length > 0) {
             data.messages.forEach((msg: Message) => {
                 if (String(msg.sender._id) !== String(currentUserId) && 
@@ -580,24 +493,12 @@ export default function ChatDetailScreen() {
       if (socket && socketConnected) {
         socket.emit('read messages', chatId);
       }
-<<<<<<< HEAD
-      // Immediately update local state to show blue ticks for sent messages
+      // Mark messages we received as read
       setMessages(prev => prev.map(m => {
-        // Only mark as read messages we sent to this specific user
-        if (String(m.sender._id) === String(currentUserId) && 
-            String(m.receiver._id) === String(otherUserId) && 
-            otherUserId &&
-            !m.readBy?.includes(otherUserId)) {
-          return { ...m, readBy: [...(m.readBy || []), otherUserId] };
-=======
-      // Immediately update local state to show that WE have read their messages
-      setMessages(prev => prev.map(m => {
-        // Only mark as read messages we received from the other user
         if (String(m.sender._id) !== String(currentUserId) && 
             currentUserId &&
             !m.readBy?.includes(currentUserId)) {
           return { ...m, readBy: [...(m.readBy || []), currentUserId] };
->>>>>>> upstream/master
         }
         return m;
       }));
@@ -619,9 +520,6 @@ export default function ChatDetailScreen() {
         msgType: 'text'
       };
 
-<<<<<<< HEAD
-      socket.emit('new message', messageData);
-=======
       // Add quoted message ID if replying to a message
       if (quotedMessage) {
         messageData.quotedMsgId = quotedMessage._id;
@@ -631,9 +529,7 @@ export default function ChatDetailScreen() {
 
       // Clear quoted message after sending
       setQuotedMessage(null);
->>>>>>> upstream/master
       
-      // Update global context immediately so ChatList re-sorts with the new message
       updateConversation({
         conversationId: chatId,
         lastMessage: {
@@ -641,7 +537,7 @@ export default function ChatDetailScreen() {
           createdAt: new Date().toISOString(),
           sender: {
             _id: currentUserId,
-            username: 'You', // This gets formatted by ChatList's isFromMe logic anyway
+            username: 'You',
             profilePicture: ''
           }
         },
@@ -653,7 +549,6 @@ export default function ChatDetailScreen() {
       setNewMessage('');
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       socket.emit('stop typing', chatId);
-      // Inverted FlatList handles scrolling automatically
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.message || 'Failed to send message');
     }
@@ -688,17 +583,9 @@ export default function ChatDetailScreen() {
     await fetchMessages(true);
   }, [loadingMore, hasMore, oldestMessageId, fetchMessages]);
 
-<<<<<<< HEAD
-  // Handle scroll to detect when user wants to load more, AND the scroll-and-hold calling gesture
+  // Handle scroll to detect when user wants to load more AND the scroll-and-hold calling gesture
   const handleScroll = useCallback((event: any) => {
     const offsetY = event.nativeEvent.contentOffset.y;
-    
-    // In inverted FlatList, scrolling to "top" (oldest messages) means offsetY becomes more negative
-    // (Actually depending on React Native version, Y could be highly positive or highly negative. Let's trace it)
-    // When user scrolls very close to the top edge (newest messages in inverted list are at 0):
-    // Wait, the user said "scroll up through oldest of chat". 
-    // In an inverted list, oldest messages are at the BOTTOM visually (highest Y offset).
-    // Let's trigger when they hit the absolute bottom (max offset) and pull further.
     
     const contentHeight = event.nativeEvent.contentSize.height;
     const layoutHeight = event.nativeEvent.layoutMeasurement.height;
@@ -710,7 +597,6 @@ export default function ChatDetailScreen() {
     }
     
     // Pull-to-call logic (pulling past max offset)
-    // Only allow if we loaded all messages (!hasMore) or we just decide they can call anytime they over-scroll the current top.
     if (offsetY > maxOffset + 30) {
       if (!isHoldingTop) {
         setIsHoldingTop(true);
@@ -719,22 +605,20 @@ export default function ChatDetailScreen() {
         if (!callTimerRef.current) {
           callTimerRef.current = setInterval(() => {
             const elapsed = Date.now() - holdStartTimeRef.current;
-            const progress = Math.min(elapsed / 2000, 1); // 2 seconds
+            const progress = Math.min(elapsed / 2000, 1);
             setCallProgress(progress);
             
             if (progress >= 1) {
-              // Trigger Call!
               if (callTimerRef.current) clearInterval(callTimerRef.current);
               callTimerRef.current = null;
               setIsHoldingTop(false);
               setCallProgress(0);
               triggerCall();
             }
-          }, 50); // 20fps update
+          }, 50);
         }
       }
     } else {
-      // Cancel hold
       if (isHoldingTop) {
         setIsHoldingTop(false);
         setCallProgress(0);
@@ -746,8 +630,6 @@ export default function ChatDetailScreen() {
     }
   }, [hasMore, loadingMore, loadMoreMessages, isHoldingTop]);
 
-=======
->>>>>>> upstream/master
   const triggerCall = () => {
     if (otherUserId && chatId) {
       initiateCall([otherUserId], chatId);
@@ -756,8 +638,6 @@ export default function ChatDetailScreen() {
     }
   };
 
-<<<<<<< HEAD
-=======
   // Handle long press on message to reply
   const handleMessageLongPress = useCallback((message: Message) => {
     setQuotedMessage(message);
@@ -766,7 +646,6 @@ export default function ChatDetailScreen() {
   // Focus input when quoted message changes
   useEffect(() => {
     if (quotedMessage) {
-      // Small delay to ensure the UI has updated
       const timer = setTimeout(() => {
         inputRef.current?.focus();
       }, 100);
@@ -779,22 +658,15 @@ export default function ChatDetailScreen() {
     setQuotedMessage(message);
   }, []);
 
->>>>>>> upstream/master
   const renderItem = useCallback(({ item }: { item: ListItem }) => (
     <MessageItem 
       item={item} 
       currentUserId={currentUserId} 
-<<<<<<< HEAD
-      isMessageRead={isMessageRead} 
-    />
-  ), [currentUserId, isMessageRead]);
-=======
       isMessageRead={isMessageRead}
       onLongPress={handleMessageLongPress}
       onSwipeReply={handleSwipeReply}
     />
   ), [currentUserId, isMessageRead, handleMessageLongPress, handleSwipeReply]);
->>>>>>> upstream/master
 
   // Render header for loading more indicator
   const renderHeader = useCallback(() => {
@@ -817,14 +689,7 @@ export default function ChatDetailScreen() {
         <View style={styles.callHoverContainer}>
           <View style={styles.callIconWrapper}>
             <Svg width="80" height="80" viewBox="0 0 80 80" style={styles.circularProgress}>
-              <Circle
-                cx="40"
-                cy="40"
-                r="36"
-                stroke="#333"
-                strokeWidth="4"
-                fill="none"
-              />
+              <Circle cx="40" cy="40" r="36" stroke="#333" strokeWidth="4" fill="none" />
               <Circle
                 cx="40"
                 cy="40"
@@ -860,19 +725,11 @@ export default function ChatDetailScreen() {
           </Text>
         </View>
 
-<<<<<<< HEAD
-        {/* Desktop Web Fallback Call Button */}
-        {Platform.OS === 'web' && (
-          <TouchableOpacity onPress={triggerCall} style={styles.webCallButton}>
-            <Ionicons name="call" size={24} color="#4ADDAE" />
-          </TouchableOpacity>
-        )}
-=======
         {/* Call Buttons */}
         <View style={styles.callButtonsContainer}>
           <TouchableOpacity onPress={() => {
             if (otherUserId && chatId) {
-              initiateCall([otherUserId], chatId, false); // Audio call
+              initiateCall([otherUserId], chatId, false);
             } else {
               Alert.alert("Error", "Cannot initiate call right now.");
             }
@@ -881,7 +738,7 @@ export default function ChatDetailScreen() {
           </TouchableOpacity>
           <TouchableOpacity onPress={() => {
             if (otherUserId && chatId) {
-              initiateCall([otherUserId], chatId, true); // Video call
+              initiateCall([otherUserId], chatId, true);
             } else {
               Alert.alert("Error", "Cannot initiate video call right now.");
             }
@@ -889,7 +746,6 @@ export default function ChatDetailScreen() {
             <Ionicons name="videocam" size={24} color="#4ADDAE" />
           </TouchableOpacity>
         </View>
->>>>>>> upstream/master
       </View>
 
       <FlatList
@@ -904,41 +760,13 @@ export default function ChatDetailScreen() {
         maxToRenderPerBatch={10}
         windowSize={10}
         removeClippedSubviews={Platform.OS === 'android'}
-<<<<<<< HEAD
         onScroll={handleScroll}
         scrollEventThrottle={16}
-=======
->>>>>>> upstream/master
         onEndReached={hasMore && !loadingMore && messages.length > 0 ? loadMoreMessages : null}
         onEndReachedThreshold={0.5}
         ListHeaderComponent={renderHeader}
       />
 
-<<<<<<< HEAD
-      <View style={styles.inputContainer}>
-        <TextInput
-          ref={inputRef}
-          style={styles.input}
-          value={newMessage}
-          onChangeText={handleTyping}
-          placeholder="Type a message..."
-          placeholderTextColor="#999"
-          multiline={false}
-          autoFocus={true}
-          blurOnSubmit={false}
-          onSubmitEditing={sendMessage}
-          returnKeyType="send"
-        />
-        <TouchableOpacity
-          style={[styles.sendButton, (!socketConnected || !newMessage.trim()) && styles.sendButtonDisabled]}
-          onPress={sendMessage}
-          disabled={!socketConnected || !newMessage.trim()}
-        >
-          <Text style={[styles.sendButtonText, (!socketConnected || !newMessage.trim()) && styles.sendButtonTextDisabled]}>
-            {socketConnected ? 'Send' : 'Connecting...'}
-          </Text>
-        </TouchableOpacity>
-=======
       {/* Input Area - Using column layout to properly stack reply preview and input */}
       <View style={[styles.inputContainer, quotedMessage && styles.inputContainerWithReply]}>
         {/* Reply Preview Bar */}
@@ -983,17 +811,13 @@ export default function ChatDetailScreen() {
             </Text>
           </TouchableOpacity>
         </View>
->>>>>>> upstream/master
       </View>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#151718',
-  },
+  container: { flex: 1, backgroundColor: '#151718' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1002,52 +826,17 @@ const styles = StyleSheet.create({
     borderBottomColor: '#333',
     backgroundColor: '#1a1a1a',
   },
-  backButtonContainer: {
-    marginRight: 12,
-  },
-  backButton: {
-    fontSize: 24,
-    color: '#007AFF',
-  },
-  headerInfo: {
-    flex: 1,
-  },
-  statusText: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  onlineStatus: {
-    color: '#34C759',
-  },
-  offlineStatus: {
-    color: '#8E8E93',
-  },
-  webCallButton: {
-    padding: 8,
-    marginLeft: 12,
-  },
-<<<<<<< HEAD
-=======
-  callButtonsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  callButton: {
-    padding: 8,
-  },
->>>>>>> upstream/master
-  messagesList: {
-    flex: 1,
-  },
-  messagesContainer: {
-    padding: 16,
-    paddingTop: 8,
-  },
-  dateSeparator: {
-    alignItems: 'center',
-    marginVertical: 12,
-  },
+  backButtonContainer: { marginRight: 12 },
+  backButton: { fontSize: 24, color: '#007AFF' },
+  headerInfo: { flex: 1 },
+  statusText: { fontSize: 12, marginTop: 2 },
+  onlineStatus: { color: '#34C759' },
+  offlineStatus: { color: '#8E8E93' },
+  callButtonsContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  callButton: { padding: 8 },
+  messagesList: { flex: 1 },
+  messagesContainer: { padding: 16, paddingTop: 8 },
+  dateSeparator: { alignItems: 'center', marginVertical: 12 },
   dateSeparatorText: {
     backgroundColor: '#2b2b2b',
     color: '#aaa',
@@ -1063,7 +852,7 @@ const styles = StyleSheet.create({
     padding: 10,
     paddingHorizontal: 14,
     borderRadius: 20,
-    elevation: 1, // subtle shadow for Android
+    elevation: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
@@ -1071,91 +860,31 @@ const styles = StyleSheet.create({
   },
   ownMessage: {
     alignSelf: 'flex-end',
-    backgroundColor: '#005c4b', // WhatsApp Dark Mode Green
+    backgroundColor: '#005c4b',
     borderBottomRightRadius: 4,
   },
   otherMessage: {
     alignSelf: 'flex-start',
-    backgroundColor: '#202c33', // WhatsApp Dark Mode Gray
+    backgroundColor: '#202c33',
     borderBottomLeftRadius: 4,
   },
-  messageText: {
-    fontSize: 15,
-    lineHeight: 20,
-  },
-  ownMessageText: {
-    color: '#e9edef',
-  },
-  otherMessageText: {
-    color: '#e9edef',
-  },
-  senderNameText: {
-    color: '#4ADDAE',
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  timestamp: {
-    fontSize: 12,
-    marginTop: 4,
-  },
-  ownTimestamp: {
-    color: '#e0e0e0',
-    textAlign: 'right',
-  },
-  otherTimestamp: {
-    color: '#aaa',
-  },
-  timestampContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  readStatus: {
-    fontSize: 12,
-    marginLeft: 8,
-  },
-  readStatusBlue: {
-    color: '#34B7F1',
-  },
-  readStatusGray: {
-    color: '#e0e0e0',
-  },
-  editedText: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  ownEditedText: {
-    color: '#e0e0e0',
-  },
-  otherEditedText: {
-    color: '#999',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    padding: 8,
-    paddingHorizontal: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#202c33',
-    backgroundColor: '#1f2c34', // WhatsApp dark mode input bg
-    alignItems: 'flex-end',
-<<<<<<< HEAD
-=======
-  },
-  inputContainerWithReply: {
-    flexDirection: 'column',
-    padding: 8,
-    paddingHorizontal: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#202c33',
-    backgroundColor: '#1f2c34',
-    alignItems: 'stretch',
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
->>>>>>> upstream/master
-  },
+  messageText: { fontSize: 15, lineHeight: 20 },
+  ownMessageText: { color: '#e9edef' },
+  otherMessageText: { color: '#e9edef' },
+  senderNameText: { color: '#4ADDAE', fontSize: 12, fontWeight: 'bold', marginBottom: 4 },
+  timestamp: { fontSize: 12, marginTop: 4 },
+  ownTimestamp: { color: '#e0e0e0', textAlign: 'right' },
+  otherTimestamp: { color: '#aaa' },
+  timestampContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  readStatus: { fontSize: 12, marginLeft: 8 },
+  readStatusBlue: { color: '#34B7F1' },
+  readStatusGray: { color: '#e0e0e0' },
+  editedText: { fontSize: 12, marginTop: 2 },
+  ownEditedText: { color: '#e0e0e0' },
+  otherEditedText: { color: '#999' },
+  inputContainer: { flexDirection: 'row', padding: 8, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: '#202c33', backgroundColor: '#1f2c34', alignItems: 'flex-end' },
+  inputContainerWithReply: { flexDirection: 'column', padding: 8, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: '#202c33', backgroundColor: '#1f2c34', alignItems: 'stretch' },
+  inputRow: { flexDirection: 'row', alignItems: 'center' },
   input: {
     flex: 1,
     borderWidth: 0,
@@ -1166,17 +895,11 @@ const styles = StyleSheet.create({
     marginRight: 8,
     maxHeight: 120,
     color: '#e9edef',
-    backgroundColor: '#2a3942', // WhatsApp dark mode input field inside
+    backgroundColor: '#2a3942',
     fontSize: 16,
-<<<<<<< HEAD
-=======
-  },
-  inputWithReply: {
-    marginTop: 8,
->>>>>>> upstream/master
   },
   sendButton: {
-    backgroundColor: '#00a884', // WhatsApp dark mode teal
+    backgroundColor: '#00a884',
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -1184,123 +907,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 2,
   },
-  sendButtonDisabled: {
-    backgroundColor: '#3b4a54',
-  },
-  sendButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  callHoverContainer: {
-    position: 'absolute',
-    top: 100,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 100,
-    pointerEvents: 'none',
-  },
-  callIconWrapper: {
-    width: 80,
-    height: 80,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 40,
-  },
-  circularProgress: {
-    position: 'absolute',
-  },
-  callHoverText: {
-    color: '#fff',
-    marginTop: 12,
-    fontWeight: 'bold',
-    fontSize: 14,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 16,
-    paddingVertical: 4,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  sendButtonTextDisabled: {
-    color: '#8b9a9f',
-  },
-  loadingMoreContainer: {
-    padding: 12,
-    alignItems: 'center',
-  },
-  loadingMoreText: {
-    color: '#8E8E93',
-    fontSize: 12,
-<<<<<<< HEAD
-=======
-  },
-  // Reply Preview Styles
-  replyPreviewContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#2a3942',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginBottom: 8,
-  },
-  replyPreviewLine: {
-    width: 3,
-    height: '100%',
-    backgroundColor: '#4ADDAE',
-    borderRadius: 2,
-    marginRight: 12,
-  },
-  replyPreviewContent: {
-    flex: 1,
-  },
-  replyPreviewName: {
-    color: '#4ADDAE',
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginBottom: 2,
-  },
-  replyPreviewText: {
-    color: '#aaa',
-    fontSize: 14,
-  },
-  cancelReplyButton: {
-    padding: 4,
-  },
-  // Quoted Message in Bubble Styles
-  quotedMessageContainer: {
-    borderLeftWidth: 3,
-    paddingLeft: 8,
-    marginBottom: 6,
-  },
-  ownQuotedMessage: {
-    borderLeftColor: '#4ADDAE',
-  },
-  otherQuotedMessage: {
-    borderLeftColor: '#4ADDAE',
-  },
-  quotedMessageName: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginBottom: 2,
-  },
-  ownQuotedName: {
-    color: '#4ADDAE',
-  },
-  otherQuotedName: {
-    color: '#4ADDAE',
-  },
-  quotedMessageText: {
-    fontSize: 13,
-  },
-  ownQuotedText: {
-    color: '#a8c7bb',
-  },
-  otherQuotedText: {
-    color: '#aaa',
->>>>>>> upstream/master
-  },
+  sendButtonDisabled: { backgroundColor: '#3b4a54' },
+  sendButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+  sendButtonTextDisabled: { color: '#8b9a9f' },
+  callHoverContainer: { position: 'absolute', top: 100, left: 0, right: 0, alignItems: 'center', zIndex: 100, pointerEvents: 'none' },
+  callIconWrapper: { width: 80, height: 80, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 40 },
+  circularProgress: { position: 'absolute' },
+  callHoverText: { color: '#fff', marginTop: 12, fontWeight: 'bold', fontSize: 14, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 16, paddingVertical: 4, borderRadius: 12, overflow: 'hidden' },
+  loadingMoreContainer: { padding: 12, alignItems: 'center' },
+  loadingMoreText: { color: '#8E8E93', fontSize: 12 },
+  replyPreviewContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2a3942', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 8 },
+  replyPreviewLine: { width: 3, height: '100%', backgroundColor: '#4ADDAE', borderRadius: 2, marginRight: 12 },
+  replyPreviewContent: { flex: 1 },
+  replyPreviewName: { color: '#4ADDAE', fontSize: 12, fontWeight: 'bold', marginBottom: 2 },
+  replyPreviewText: { color: '#aaa', fontSize: 14 },
+  cancelReplyButton: { padding: 4 },
+  quotedMessageContainer: { borderLeftWidth: 3, paddingLeft: 8, marginBottom: 6 },
+  ownQuotedMessage: { borderLeftColor: '#4ADDAE' },
+  otherQuotedMessage: { borderLeftColor: '#4ADDAE' },
+  quotedMessageName: { fontSize: 12, fontWeight: 'bold', marginBottom: 2 },
+  ownQuotedName: { color: '#4ADDAE' },
+  otherQuotedName: { color: '#4ADDAE' },
+  quotedMessageText: { fontSize: 13 },
+  ownQuotedText: { color: '#a8c7bb' },
+  otherQuotedText: { color: '#aaa' },
 });
 

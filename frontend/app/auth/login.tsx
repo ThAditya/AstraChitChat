@@ -14,8 +14,6 @@ export default function LoginScreen() {
   const [userId, setUserId] = useState('');
   const router = useRouter();
   const { connect } = useSocket();
-<<<<<<< HEAD
-=======
 
   const completeLogin = async (data: any) => {
     // Store token and userId before navigation
@@ -60,7 +58,6 @@ export default function LoginScreen() {
     // Navigate only after storage operations complete
     router.replace('/(tabs)');
   };
->>>>>>> upstream/master
 
   const handleLogin = async () => {
     if (requires2FA) {
@@ -92,61 +89,18 @@ export default function LoginScreen() {
     try {
       const data = await post('/auth/login', { email, password });
       
-<<<<<<< HEAD
-      // Store token and userId before navigation
-      await AsyncStorage.setItem('token', data.token);
-      await AsyncStorage.setItem('userId', data._id);
-
-      // --- MULTI-ACCOUNT SUPPORT ---
-      // Fetch existing saved accounts
-      const savedAccountsStr = await AsyncStorage.getItem('saved_accounts');
-      let savedAccounts: any[] = [];
-      if (savedAccountsStr) {
-        try {
-          savedAccounts = JSON.parse(savedAccountsStr);
-        } catch (e) {
-          savedAccounts = [];
-        }
-      }
-
-      // Check if account already exists in the list to avoid duplicates
-      const accountExists = savedAccounts.some(acc => acc.userId === data._id);
-      
-      if (!accountExists) {
-        // Add new account to the list
-        savedAccounts.push({
-          userId: data._id,
-          token: data.token,
-          username: data.username || data.name || email.split('@')[0], // Fallback if backend doesn't return username
-          profilePicture: data.profilePicture || 'https://via.placeholder.com/40' // Fallback image
-        });
-        await AsyncStorage.setItem('saved_accounts', JSON.stringify(savedAccounts));
-      } else {
-        // If it exists, update the token just in case it refreshed
-        const updatedAccounts = savedAccounts.map(acc => 
-          acc.userId === data._id ? { ...acc, token: data.token } : acc
-        );
-        await AsyncStorage.setItem('saved_accounts', JSON.stringify(updatedAccounts));
-      }
-      
-      // Connect to socket before navigation
-      await connect();
-      
-      // Navigate only after storage operations complete
-      router.replace('/(tabs)');
-=======
+      // Check if 2FA is required first
       if (data.requires2FA) {
         setRequires2FA(true);
         setUserId(data.userId);
+        setLoading(false);
         return;
       }
       
+      // Otherwise, complete the login normally
       await completeLogin(data);
->>>>>>> upstream/master
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.message || 'Login failed. Please check your credentials and try again.');
-    } finally {
-      if (!requires2FA) setLoading(false); // don't stop loading if branching to 2FA? We wait to setRequires2FA so it's fine
       setLoading(false);
     }
   };
@@ -239,3 +193,4 @@ const styles = StyleSheet.create({
     color: '#007AFF',
   },
 });
+
