@@ -1,5 +1,9 @@
 import React, { useEffect, useState, useRef, useCallback, memo } from 'react';
+<<<<<<< HEAD
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+=======
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform, PanResponder, Animated } from 'react-native';
+>>>>>>> upstream/master
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
@@ -9,6 +13,10 @@ import { get, post } from '@/services/api';
 import { useSocket } from '@/contexts/SocketContext';
 import { useCall } from '@/contexts/CallContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+<<<<<<< HEAD
+=======
+import SwipeableMessage from '@/components/SwipeableMessage';
+>>>>>>> upstream/master
 
 interface Message {
   _id: string;
@@ -29,6 +37,14 @@ interface Message {
   mediaMime?: string;
   mediaSizeBytes?: number;
   quotedMsgId?: string;
+  quotedMessage?: {
+    _id: string;
+    bodyText: string;
+    sender: {
+      _id: string;
+      username: string;
+    };
+  };
   editedAt?: string;
   unsentAt?: string;
   unsentBy?: string;
@@ -47,11 +63,22 @@ type ListItem =
 const MessageItem = memo(({ 
   item, 
   currentUserId,
+<<<<<<< HEAD
   isMessageRead
+=======
+  isMessageRead,
+  onLongPress,
+  onSwipeReply
+>>>>>>> upstream/master
 }: { 
   item: ListItem; 
   currentUserId: string | null;
   isMessageRead: (message: Message, currentId: string | null) => boolean;
+<<<<<<< HEAD
+=======
+  onLongPress?: (message: Message) => void;
+  onSwipeReply?: (message: Message) => void;
+>>>>>>> upstream/master
 }) => {
   if (item.type === 'dateSeparator') {
     return (
@@ -70,6 +97,7 @@ const MessageItem = memo(({
 
   const isGroupChat = typeof message.chat === 'object' ? message.chat?.convoType === 'group' : false;
 
+<<<<<<< HEAD
   return (
     <View style={[styles.messageContainer, isOwnMessage ? styles.ownMessage : styles.otherMessage]}>
       {!isOwnMessage && message.sender?.username && (
@@ -97,6 +125,63 @@ const MessageItem = memo(({
         )}
       </View>
     </View>
+=======
+  // Handle swipe to reply
+  const handleSwipe = useCallback(() => {
+    onSwipeReply?.(message);
+  }, [message, onSwipeReply]);
+
+  return (
+    <SwipeableMessage
+      onSwipeReply={handleSwipe}
+      isOwnMessage={isOwnMessage}
+    >
+      <TouchableOpacity 
+        onLongPress={() => onLongPress?.(message)}
+        delayLongPress={500}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.messageContainer, isOwnMessage ? styles.ownMessage : styles.otherMessage]}>
+          {/* Quoted Message Display */}
+          {message.quotedMessage && (
+            <View style={[styles.quotedMessageContainer, isOwnMessage ? styles.ownQuotedMessage : styles.otherQuotedMessage]}>
+              <Text style={[styles.quotedMessageName, isOwnMessage ? styles.ownQuotedName : styles.otherQuotedName]}>
+                {message.quotedMessage.sender?.username || 'Unknown'}
+              </Text>
+              <Text style={[styles.quotedMessageText, isOwnMessage ? styles.ownQuotedText : styles.otherQuotedText]} numberOfLines={1}>
+                {message.quotedMessage.bodyText || 'Message'}
+              </Text>
+            </View>
+          )}
+          
+          {!isOwnMessage && message.sender?.username && (
+            <Text style={styles.senderNameText}>{message.sender.username}</Text>
+          )}
+          <Text style={[styles.messageText, isOwnMessage ? styles.ownMessageText : styles.otherMessageText]}>
+            {message.unsentAt ? '[Message unsent]' : (message.bodyText || message.content)}
+          </Text>
+          {message.editedAt && !message.unsentAt && (
+            <Text style={[styles.editedText, isOwnMessage ? styles.ownEditedText : styles.otherEditedText]}>
+              (edited)
+            </Text>
+          )}
+          <View style={styles.timestampContainer}>
+            <Text style={[styles.timestamp, isOwnMessage ? styles.ownTimestamp : styles.otherTimestamp]}>
+              {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </Text>
+            {isOwnMessage && (
+              <Text style={[
+                styles.readStatus, 
+                isRead ? styles.readStatusBlue : styles.readStatusGray
+              ]}>
+                {isRead ? '✓✓' : (isDelivered ? '✓✓' : '✓')}
+              </Text>
+            )}
+          </View>
+        </View>
+      </TouchableOpacity>
+    </SwipeableMessage>
+>>>>>>> upstream/master
   );
 });
 
@@ -112,12 +197,18 @@ export default function ChatDetailScreen() {
   const [otherUserTyping, setOtherUserTyping] = useState(false);
   const [otherUserStatus, setOtherUserStatus] = useState<{ isOnline: boolean; lastSeen: string | null }>({ isOnline: false, lastSeen: null });
   
+<<<<<<< HEAD
   // Call Gesture State
   const [isHoldingTop, setIsHoldingTop] = useState(false);
   const [callProgress, setCallProgress] = useState(0);
   const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const holdStartTimeRef = useRef<number>(0);
 
+=======
+  // Reply/Quote feature state
+  const [quotedMessage, setQuotedMessage] = useState<Message | null>(null);
+  
+>>>>>>> upstream/master
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
@@ -253,6 +344,13 @@ export default function ChatDetailScreen() {
     init();
     
     return () => {
+<<<<<<< HEAD
+=======
+      // Clear typing timeout on unmount to prevent memory leaks
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+>>>>>>> upstream/master
       setActiveChatId(null);
     };
   }, [chatId, otherUserId, setActiveChatId]);
@@ -376,6 +474,10 @@ export default function ChatDetailScreen() {
     socket.on('typing', handleRemoteTyping);
     socket.on('stop typing', handleRemoteStopTyping);
     socket.on('messages read', handleMessagesRead);
+<<<<<<< HEAD
+=======
+    socket.on('message delivered', handleMessageDelivered);
+>>>>>>> upstream/master
 
     return () => {
       socket.off('message received', handleMessageReceived);
@@ -478,6 +580,7 @@ export default function ChatDetailScreen() {
       if (socket && socketConnected) {
         socket.emit('read messages', chatId);
       }
+<<<<<<< HEAD
       // Immediately update local state to show blue ticks for sent messages
       setMessages(prev => prev.map(m => {
         // Only mark as read messages we sent to this specific user
@@ -486,6 +589,15 @@ export default function ChatDetailScreen() {
             otherUserId &&
             !m.readBy?.includes(otherUserId)) {
           return { ...m, readBy: [...(m.readBy || []), otherUserId] };
+=======
+      // Immediately update local state to show that WE have read their messages
+      setMessages(prev => prev.map(m => {
+        // Only mark as read messages we received from the other user
+        if (String(m.sender._id) !== String(currentUserId) && 
+            currentUserId &&
+            !m.readBy?.includes(currentUserId)) {
+          return { ...m, readBy: [...(m.readBy || []), currentUserId] };
+>>>>>>> upstream/master
         }
         return m;
       }));
@@ -498,7 +610,7 @@ export default function ChatDetailScreen() {
     if (!newMessage.trim() || !currentUserId || !socket || !socketConnected) return;
 
     try {
-      const messageData = {
+      const messageData: any = {
         sender: currentUserId,
         receiver: otherUserId,
         chat: chatId,
@@ -507,7 +619,19 @@ export default function ChatDetailScreen() {
         msgType: 'text'
       };
 
+<<<<<<< HEAD
       socket.emit('new message', messageData);
+=======
+      // Add quoted message ID if replying to a message
+      if (quotedMessage) {
+        messageData.quotedMsgId = quotedMessage._id;
+      }
+
+      socket.emit('new message', messageData);
+
+      // Clear quoted message after sending
+      setQuotedMessage(null);
+>>>>>>> upstream/master
       
       // Update global context immediately so ChatList re-sorts with the new message
       updateConversation({
@@ -564,6 +688,7 @@ export default function ChatDetailScreen() {
     await fetchMessages(true);
   }, [loadingMore, hasMore, oldestMessageId, fetchMessages]);
 
+<<<<<<< HEAD
   // Handle scroll to detect when user wants to load more, AND the scroll-and-hold calling gesture
   const handleScroll = useCallback((event: any) => {
     const offsetY = event.nativeEvent.contentOffset.y;
@@ -621,6 +746,8 @@ export default function ChatDetailScreen() {
     }
   }, [hasMore, loadingMore, loadMoreMessages, isHoldingTop]);
 
+=======
+>>>>>>> upstream/master
   const triggerCall = () => {
     if (otherUserId && chatId) {
       initiateCall([otherUserId], chatId);
@@ -629,13 +756,45 @@ export default function ChatDetailScreen() {
     }
   };
 
+<<<<<<< HEAD
+=======
+  // Handle long press on message to reply
+  const handleMessageLongPress = useCallback((message: Message) => {
+    setQuotedMessage(message);
+  }, []);
+
+  // Focus input when quoted message changes
+  useEffect(() => {
+    if (quotedMessage) {
+      // Small delay to ensure the UI has updated
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [quotedMessage]);
+
+  // Handle swipe to reply (WhatsApp style)
+  const handleSwipeReply = useCallback((message: Message) => {
+    setQuotedMessage(message);
+  }, []);
+
+>>>>>>> upstream/master
   const renderItem = useCallback(({ item }: { item: ListItem }) => (
     <MessageItem 
       item={item} 
       currentUserId={currentUserId} 
+<<<<<<< HEAD
       isMessageRead={isMessageRead} 
     />
   ), [currentUserId, isMessageRead]);
+=======
+      isMessageRead={isMessageRead}
+      onLongPress={handleMessageLongPress}
+      onSwipeReply={handleSwipeReply}
+    />
+  ), [currentUserId, isMessageRead, handleMessageLongPress, handleSwipeReply]);
+>>>>>>> upstream/master
 
   // Render header for loading more indicator
   const renderHeader = useCallback(() => {
@@ -701,12 +860,36 @@ export default function ChatDetailScreen() {
           </Text>
         </View>
 
+<<<<<<< HEAD
         {/* Desktop Web Fallback Call Button */}
         {Platform.OS === 'web' && (
           <TouchableOpacity onPress={triggerCall} style={styles.webCallButton}>
             <Ionicons name="call" size={24} color="#4ADDAE" />
           </TouchableOpacity>
         )}
+=======
+        {/* Call Buttons */}
+        <View style={styles.callButtonsContainer}>
+          <TouchableOpacity onPress={() => {
+            if (otherUserId && chatId) {
+              initiateCall([otherUserId], chatId, false); // Audio call
+            } else {
+              Alert.alert("Error", "Cannot initiate call right now.");
+            }
+          }} style={styles.callButton}>
+            <Ionicons name="call" size={24} color="#4ADDAE" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => {
+            if (otherUserId && chatId) {
+              initiateCall([otherUserId], chatId, true); // Video call
+            } else {
+              Alert.alert("Error", "Cannot initiate video call right now.");
+            }
+          }} style={styles.callButton}>
+            <Ionicons name="videocam" size={24} color="#4ADDAE" />
+          </TouchableOpacity>
+        </View>
+>>>>>>> upstream/master
       </View>
 
       <FlatList
@@ -721,13 +904,17 @@ export default function ChatDetailScreen() {
         maxToRenderPerBatch={10}
         windowSize={10}
         removeClippedSubviews={Platform.OS === 'android'}
+<<<<<<< HEAD
         onScroll={handleScroll}
         scrollEventThrottle={16}
+=======
+>>>>>>> upstream/master
         onEndReached={hasMore && !loadingMore && messages.length > 0 ? loadMoreMessages : null}
         onEndReachedThreshold={0.5}
         ListHeaderComponent={renderHeader}
       />
 
+<<<<<<< HEAD
       <View style={styles.inputContainer}>
         <TextInput
           ref={inputRef}
@@ -751,6 +938,52 @@ export default function ChatDetailScreen() {
             {socketConnected ? 'Send' : 'Connecting...'}
           </Text>
         </TouchableOpacity>
+=======
+      {/* Input Area - Using column layout to properly stack reply preview and input */}
+      <View style={[styles.inputContainer, quotedMessage && styles.inputContainerWithReply]}>
+        {/* Reply Preview Bar */}
+        {quotedMessage && (
+          <View style={styles.replyPreviewContainer}>
+            <View style={styles.replyPreviewLine} />
+            <View style={styles.replyPreviewContent}>
+              <Text style={styles.replyPreviewName}>
+                Replying to {String(quotedMessage.sender._id) === String(currentUserId) ? 'yourself' : quotedMessage.sender.username}
+              </Text>
+              <Text style={styles.replyPreviewText} numberOfLines={1}>
+                {quotedMessage.bodyText || quotedMessage.content || 'Media'}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => setQuotedMessage(null)} style={styles.cancelReplyButton}>
+              <Ionicons name="close-circle" size={24} color="#666" />
+            </TouchableOpacity>
+          </View>
+        )}
+        
+        {/* Input row with TextInput and Send button */}
+        <View style={styles.inputRow}>
+          <TextInput
+            ref={inputRef}
+            style={styles.input}
+            value={newMessage}
+            onChangeText={handleTyping}
+            placeholder={quotedMessage ? "Write your reply..." : "Type a message..."}
+            placeholderTextColor="#999"
+            multiline={false}
+            blurOnSubmit={false}
+            onSubmitEditing={sendMessage}
+            returnKeyType="send"
+          />
+          <TouchableOpacity
+            style={[styles.sendButton, (!socketConnected || !newMessage.trim()) && styles.sendButtonDisabled]}
+            onPress={sendMessage}
+            disabled={!socketConnected || !newMessage.trim()}
+          >
+            <Text style={[styles.sendButtonText, (!socketConnected || !newMessage.trim()) && styles.sendButtonTextDisabled]}>
+              {socketConnected ? 'Send' : 'Connecting...'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+>>>>>>> upstream/master
       </View>
     </KeyboardAvoidingView>
   );
@@ -793,6 +1026,17 @@ const styles = StyleSheet.create({
     padding: 8,
     marginLeft: 12,
   },
+<<<<<<< HEAD
+=======
+  callButtonsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  callButton: {
+    padding: 8,
+  },
+>>>>>>> upstream/master
   messagesList: {
     flex: 1,
   },
@@ -895,6 +1139,22 @@ const styles = StyleSheet.create({
     borderTopColor: '#202c33',
     backgroundColor: '#1f2c34', // WhatsApp dark mode input bg
     alignItems: 'flex-end',
+<<<<<<< HEAD
+=======
+  },
+  inputContainerWithReply: {
+    flexDirection: 'column',
+    padding: 8,
+    paddingHorizontal: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#202c33',
+    backgroundColor: '#1f2c34',
+    alignItems: 'stretch',
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+>>>>>>> upstream/master
   },
   input: {
     flex: 1,
@@ -908,6 +1168,12 @@ const styles = StyleSheet.create({
     color: '#e9edef',
     backgroundColor: '#2a3942', // WhatsApp dark mode input field inside
     fontSize: 16,
+<<<<<<< HEAD
+=======
+  },
+  inputWithReply: {
+    marginTop: 8,
+>>>>>>> upstream/master
   },
   sendButton: {
     backgroundColor: '#00a884', // WhatsApp dark mode teal
@@ -967,5 +1233,74 @@ const styles = StyleSheet.create({
   loadingMoreText: {
     color: '#8E8E93',
     fontSize: 12,
+<<<<<<< HEAD
+=======
+  },
+  // Reply Preview Styles
+  replyPreviewContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2a3942',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  replyPreviewLine: {
+    width: 3,
+    height: '100%',
+    backgroundColor: '#4ADDAE',
+    borderRadius: 2,
+    marginRight: 12,
+  },
+  replyPreviewContent: {
+    flex: 1,
+  },
+  replyPreviewName: {
+    color: '#4ADDAE',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  replyPreviewText: {
+    color: '#aaa',
+    fontSize: 14,
+  },
+  cancelReplyButton: {
+    padding: 4,
+  },
+  // Quoted Message in Bubble Styles
+  quotedMessageContainer: {
+    borderLeftWidth: 3,
+    paddingLeft: 8,
+    marginBottom: 6,
+  },
+  ownQuotedMessage: {
+    borderLeftColor: '#4ADDAE',
+  },
+  otherQuotedMessage: {
+    borderLeftColor: '#4ADDAE',
+  },
+  quotedMessageName: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  ownQuotedName: {
+    color: '#4ADDAE',
+  },
+  otherQuotedName: {
+    color: '#4ADDAE',
+  },
+  quotedMessageText: {
+    fontSize: 13,
+  },
+  ownQuotedText: {
+    color: '#a8c7bb',
+  },
+  otherQuotedText: {
+    color: '#aaa',
+>>>>>>> upstream/master
   },
 });
+

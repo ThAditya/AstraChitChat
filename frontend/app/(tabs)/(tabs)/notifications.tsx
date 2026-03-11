@@ -30,6 +30,10 @@ export default function NotificationsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+<<<<<<< HEAD
+=======
+  const [followRequestsCount, setFollowRequestsCount] = useState(0);
+>>>>>>> upstream/master
   const router = useRouter();
 
   useEffect(() => {
@@ -39,6 +43,16 @@ export default function NotificationsScreen() {
   const fetchNotifications = async (pageNum = 1, isRefresh = false) => {
     if (pageNum === 1) {
       setHasMore(true);
+<<<<<<< HEAD
+=======
+      // Fetch follow requests count
+      try {
+        const reqs = await get('/follow/requests');
+        setFollowRequestsCount(reqs.requests?.length || 0);
+      } catch (e) {
+        console.log('Error fetching follow reqs:', e);
+      }
+>>>>>>> upstream/master
     }
 
     try {
@@ -169,6 +183,24 @@ export default function NotificationsScreen() {
     </TouchableOpacity>
   );
 
+<<<<<<< HEAD
+=======
+  const renderHeader = () => {
+    if (followRequestsCount === 0) return null;
+    return (
+      <TouchableOpacity
+        style={styles.followRequestBanner}
+        onPress={() => router.push('/profile/follow-requests')}
+      >
+        <Text style={styles.followRequestText}>
+          Follow Requests ({followRequestsCount})
+        </Text>
+        <Text style={styles.followRequestArrow}>→</Text>
+      </TouchableOpacity>
+    );
+  };
+
+>>>>>>> upstream/master
   const renderFooter = () => {
     if (!loading || !hasMore || notifications.length === 0) return null;
     return (
@@ -220,6 +252,10 @@ export default function NotificationsScreen() {
         }
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.5}
+<<<<<<< HEAD
+=======
+        ListHeaderComponent={renderHeader}
+>>>>>>> upstream/master
         ListFooterComponent={renderFooter}
         ListEmptyComponent={renderEmpty}
         showsVerticalScrollIndicator={false}
@@ -301,6 +337,28 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
   },
+<<<<<<< HEAD
+=======
+  followRequestBanner: {
+    padding: 16,
+    backgroundColor: '#111',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  followRequestText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  followRequestArrow: {
+    color: '#4ADDAE',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+>>>>>>> upstream/master
   notificationItem: {
     flexDirection: 'row',
     alignItems: 'center',

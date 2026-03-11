@@ -93,6 +93,10 @@ io.on('connection', (socket) => {
     // Handle sending messages
     socket.on('new message', async (newMessageReceived) => {
         const Message = require('./models/Message');
+<<<<<<< HEAD
+=======
+        const mongoose = require('mongoose');
+>>>>>>> upstream/master
 
         try {
             // Save message to database
@@ -103,14 +107,19 @@ io.on('connection', (socket) => {
                 bodyText: newMessageReceived.bodyText || newMessageReceived.content,
                 msgType: newMessageReceived.msgType || newMessageReceived.chatType || 'text',
                 attachments: newMessageReceived.attachments || [],
+<<<<<<< HEAD
                 quotedMsgId: newMessageReceived.quotedMsgId,
+=======
+                quotedMsgId: newMessageReceived.quotedMsgId ? new mongoose.Types.ObjectId(newMessageReceived.quotedMsgId) : undefined,
+>>>>>>> upstream/master
                 readBy: [{ user: newMessageReceived.sender, readAt: new Date() }]
             });
 
-            // Populate sender and receiver details
+            // Populate sender, receiver, and quoted message details
             await message.populate('sender', 'name username profilePicture');
             await message.populate('receiver', 'name username profilePicture');
 
+<<<<<<< HEAD
             // Get sender details for lastMessage
             const senderDoc = await User.findById(newMessageReceived.sender).select('name username profilePicture');
 
@@ -129,22 +138,61 @@ io.on('connection', (socket) => {
 
             // STEP 1: Update chat's lastMessage with sender as ObjectId reference
             // This is schema-compliant and allows proper population when fetching
+=======
+            // Populate quoted message if it exists
+            let quotedMessageData = null;
+            if (message.quotedMsgId) {
+                await message.populate({
+                    path: 'quotedMsgId',
+                    populate: { path: 'sender', select: 'name username profilePicture' }
+                });
+
+                // Need to re-check after populate as the message might have been deleted/unsent
+                if (message.quotedMsgId && message.quotedMsgId._id) {
+                    // Create quotedMessage object for frontend
+                    quotedMessageData = {
+                        _id: message.quotedMsgId._id,
+                        bodyText: message.quotedMsgId.bodyText,
+                        sender: {
+                            _id: message.quotedMsgId.sender._id,
+                            username: message.quotedMsgId.sender.username,
+                            profilePicture: message.quotedMsgId.sender.profilePicture
+                        }
+                    };
+                }
+            }
+
+            // Get sender details for lastMessage
+            const senderDoc = await User.findById(newMessageReceived.sender).select('name username profilePicture');
+
+            // STEP 1: Update chat's lastMessage with sender as ObjectId reference
+>>>>>>> upstream/master
             await Chat.findByIdAndUpdate(newMessageReceived.chat, {
                 lastMessage: {
                     text: newMessageReceived.bodyText || newMessageReceived.content || (newMessageReceived.attachments && newMessageReceived.attachments.length ? 'Attachment' : ''),
                     createdAt: message.createdAt,
+<<<<<<< HEAD
                     sender: message.sender._id // IMPORTANT: Store as ObjectId, not object
+=======
+                    sender: message.sender._id
+>>>>>>> upstream/master
                 },
                 updatedAt: new Date()
             });
 
             // STEP 2: Fetch the updated chat with populated sender for socket event
+<<<<<<< HEAD
             // We need the populated data (username, profilePicture) for the frontend
+=======
+>>>>>>> upstream/master
             const updatedChat = await Chat.findById(newMessageReceived.chat)
                 .populate('lastMessage.sender', 'name username profilePicture');
 
             // STEP 3: Create properly formatted lastMessage for socket event
+<<<<<<< HEAD
             // This object contains all the data the frontend needs to display the preview
+=======
+>>>>>>> upstream/master
             const lastMessageForSocket = {
                 text: updatedChat.lastMessage.text,
                 createdAt: updatedChat.lastMessage.createdAt,
@@ -155,8 +203,29 @@ io.on('connection', (socket) => {
                 }
             };
 
+<<<<<<< HEAD
             // Emit to chat room so all participants receive the message (including sender)
             io.to(newMessageReceived.chat).emit('message received', message);
+=======
+            // Create the final message object to emit
+            const messageToEmit = {
+                _id: message._id,
+                sender: message.sender,
+                receiver: message.receiver,
+                chat: message.chat,
+                msgType: message.msgType,
+                bodyText: message.bodyText,
+                attachments: message.attachments,
+                createdAt: message.createdAt,
+                readBy: [newMessageReceived.sender],
+                deliveredTo: [newMessageReceived.sender],
+                quotedMsgId: newMessageReceived.quotedMsgId ? newMessageReceived.quotedMsgId : undefined,
+                quotedMessage: quotedMessageData
+            };
+
+            // Emit to chat room so all participants receive the message (including sender)
+            io.to(newMessageReceived.chat).emit('message received', messageToEmit);
+>>>>>>> upstream/master
 
             // ========================================================================
             // Emit conversationUpdated event to both users (sender and receiver)
@@ -248,6 +317,10 @@ io.on('connection', (socket) => {
     // Handle incoming WebRTC offer
     socket.on('webrtc-offer', (data) => {
         // data expects: { targetId, offer, callerId, chatId }
+<<<<<<< HEAD
+=======
+        console.log('Forwarding webrtc-offer to:', data.targetId);
+>>>>>>> upstream/master
         socket.to(data.targetId).emit('webrtc-offer', {
             offer: data.offer,
             callerId: data.callerId,
@@ -258,6 +331,10 @@ io.on('connection', (socket) => {
     // Handle incoming WebRTC answer
     socket.on('webrtc-answer', (data) => {
         // data expects: { targetId, answer, responderId }
+<<<<<<< HEAD
+=======
+        console.log('Forwarding webrtc-answer to:', data.targetId);
+>>>>>>> upstream/master
         socket.to(data.targetId).emit('webrtc-answer', {
             answer: data.answer,
             responderId: data.responderId
@@ -267,6 +344,10 @@ io.on('connection', (socket) => {
     // Handle incoming ICE Candidate for WebRTC
     socket.on('webrtc-candidate', (data) => {
         // data expects: { targetId, candidate, senderId }
+<<<<<<< HEAD
+=======
+        console.log('Forwarding webrtc-candidate to:', data.targetId);
+>>>>>>> upstream/master
         socket.to(data.targetId).emit('webrtc-candidate', {
             candidate: data.candidate,
             senderId: data.senderId

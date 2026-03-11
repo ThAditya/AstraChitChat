@@ -30,11 +30,32 @@ const userSchema = new mongoose.Schema({
         type: String,
         default: 'https://icon-library.com/images/anonymous-avatar-icon/anonymous-avatar-icon-25.jpg'
     },
+    coverPhoto: {
+        type: String,
+        default: ''
+    },
     bio: {
         type: String,
         maxlength: 500,
         default: ''
     },
+<<<<<<< HEAD
+=======
+    location: {
+        type: String,
+        maxlength: 100,
+        default: ''
+    },
+    website: {
+        type: String,
+        default: ''
+    },
+    pronouns: {
+        type: String,
+        maxlength: 20,
+        default: ''
+    },
+>>>>>>> upstream/master
     isOnline: {
         type: Boolean,
         default: false
@@ -42,13 +63,45 @@ const userSchema = new mongoose.Schema({
     lastSeen: {
         type: Date,
         default: null
+<<<<<<< HEAD
+=======
+    },
+    blockedUsers: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    }],
+    mutedUsers: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    }],
+    isPrivate: {
+        type: Boolean,
+        default: false
+    },
+    followRequests: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    }],
+    role: {
+        type: String,
+        enum: ['user', 'admin'],
+        default: 'user'
+    },
+    twoFactorSecret: {
+        type: String,
+        select: false
+    },
+    isTwoFactorEnabled: {
+        type: Boolean,
+        default: false
+>>>>>>> upstream/master
     }
 }, {
     timestamps: true // Adds createdAt and updatedAt fields
 });
 
 // Middleware to hash password before saving the user
-userSchema.pre('save', async function(next) {
+userSchema.pre('save', async function (next) {
     if (!this.isModified('password')) {
         return next();
     }
@@ -58,7 +111,7 @@ userSchema.pre('save', async function(next) {
 });
 
 // Method to compare entered password with the hashed password in the database
-userSchema.methods.matchPassword = async function(enteredPassword) {
+userSchema.methods.matchPassword = async function (enteredPassword) {
     return await bcrypt.compare(enteredPassword, this.password);
 };
 

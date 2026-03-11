@@ -14,6 +14,10 @@ const postSchema = new mongoose.Schema({
         type: String,
         required: [true, 'Media URL is required']
     },
+    // S3 object key — needed to delete the file from S3 when the post is removed
+    mediaKey: {
+        type: String
+    },
     mediaType: {
         type: String,
         enum: ['image', 'video', 'flick'],
