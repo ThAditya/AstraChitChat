@@ -27,11 +27,20 @@ interface CallContextType extends CallState {
 
 const CallContext = createContext<CallContextType | null>(null);
 
+// ✅ PRODUCTION: TURN relay for NAT traversal (add your TURN server)
 const configuration = {
   iceServers: [
+    // STUN
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' }
+    // TURN (replace with your TURN server credentials)
+    // {
+    //   urls: 'turn:your-turn-server.com:3478?transport=udp',
+    //   username: process.env.TURN_USERNAME,
+    //   credential: process.env.TURN_CREDENTIAL
+    // },
+    { urls: 'stun:turn.matrix.org:3478?transport=udp' }, // Free public (rate limited)
+    { urls: 'turn:numb.viagenie.ca', username: 'webrtc@live.com', credential: 'muazwww' } // Free TURN
   ]
 };
 

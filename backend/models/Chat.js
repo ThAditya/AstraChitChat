@@ -65,5 +65,9 @@ chatSchema.index({ participants: 1, lastActivityTimestamp: -1 });
 // Index for direct chat uniqueness
 chatSchema.index({ participants: 1 }, { unique: true, partialFilterExpression: { convoType: 'direct', participants: { $size: 2 } } });
 
+// ✅ PRODUCTION INDEXES - Chat list performance
+chatSchema.index({ 'participants.user': 1, lastActivityTimestamp: -1 });  // User chat lists
+chatSchema.index({ 'unreadCount': 1 });                                  // Unread queries
+
 module.exports = mongoose.model('Chat', chatSchema);
 
