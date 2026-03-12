@@ -178,7 +178,7 @@ async function getChatMessages(req, res) {
           from: 'messages',
           localField: 'quotedMsgId',
           foreignField: '_id',
-          as: 'quotedMsgId',
+          as: 'quotedMessage',
           pipeline: [
             {
               $lookup: {
@@ -190,10 +190,11 @@ async function getChatMessages(req, res) {
               }
             },
             { $unwind: { path: '$sender', preserveNullAndEmptyArrays: true } },
-            { $project: { _id: 1, bodyText: 1, sender: 1 } }
+            { $project: { _id: 1, bodyText: 1, sender: 1, msgType: 1 } }
           ]
         }
       },
+      { $unwind: { path: '$quotedMessage', preserveNullAndEmptyArrays: true } },
       { $addFields: { 
         readBy: { 
           $map: {
@@ -925,4 +926,3 @@ module.exports = {
   getUserStatus,
   createGroupChat
 };
-

@@ -1,6 +1,6 @@
-import TopHeaderComponent from '@/components/TopHeaderComponent';
+
 import React, { useEffect, useState, useRef, useCallback, memo } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform, StyleSheet, View, Text, FlatList, StatusBar } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
@@ -34,6 +34,7 @@ interface Message {
   quotedMessage?: {
     _id: string;
     bodyText: string;
+    msgType?: string;
     sender: {
       _id: string;
       username: string;
@@ -59,13 +60,17 @@ const MessageItem = memo(({
   currentUserId,
   isMessageRead,
   onLongPress,
-  onSwipeReply
+  onSwipeReply,
+  onReplyPress,
+  highlightedMessageId
 }: { 
   item: ListItem; 
   currentUserId: string | null;
   isMessageRead: (message: Message, currentId: string | null) => boolean;
   onLongPress?: (message: Message) => void;
   onSwipeReply?: (message: Message) => void;
+  onReplyPress?: (messageId: string) => void;
+  highlightedMessageId?: string | null;
 }) => {
   if (item.type === 'dateSeparator') {
     return (
@@ -83,6 +88,7 @@ const MessageItem = memo(({
                       message.deliveredTo.some(id => String(id) !== String(currentUserId));
 
   const isGroupChat = typeof message.chat === 'object' ? message.chat?.convoType === 'group' : false;
+  const isHighlighted = highlightedMessageId === message._id;
 
   // Handle swipe to reply
   const handleSwipe = useCallback(() => {
@@ -99,17 +105,28 @@ const MessageItem = memo(({
         delayLongPress={500}
         activeOpacity={0.7}
       >
-        <View style={[styles.messageContainer, isOwnMessage ? styles.ownMessage : styles.otherMessage]}>
+        <View style={[
+          styles.messageContainer, 
+          isOwnMessage ? styles.ownMessage : styles.otherMessage,
+          isHighlighted && styles.highlightedMessage
+        ]}>
           {/* Quoted Message Display */}
-          {message.quotedMessage && (
-            <View style={[styles.quotedMessageContainer, isOwnMessage ? styles.ownQuotedMessage : styles.otherQuotedMessage]}>
+          {(message.quotedMessage || message.quotedMsgId) && (
+            <TouchableOpacity 
+              style={[styles.quotedMessageContainer, isOwnMessage ? styles.ownQuotedMessage : styles.otherQuotedMessage]}
+              onPress={() => message.quotedMessage && onReplyPress?.(message.quotedMessage._id)}
+              activeOpacity={0.8}
+              disabled={!message.quotedMessage}
+            >
               <Text style={[styles.quotedMessageName, isOwnMessage ? styles.ownQuotedName : styles.otherQuotedName]}>
-                {message.quotedMessage.sender?.username || 'Unknown'}
+                {message.quotedMessage?.sender?.username || 'Unknown'}
               </Text>
               <Text style={[styles.quotedMessageText, isOwnMessage ? styles.ownQuotedText : styles.otherQuotedText]} numberOfLines={1}>
-                {message.quotedMessage.bodyText || 'Message'}
+                {message.quotedMessage 
+                  ? (message.quotedMessage.msgType === 'image' ? '📷 Photo' : (message.quotedMessage.msgType === 'video' ? '🎥 Video' : (message.quotedMessage.bodyText || 'Message')))
+                  : 'Original message unavailable'}
               </Text>
-            </View>
+            </TouchableOpacity>
           )}
           
           {!isOwnMessage && message.sender?.username && (
@@ -313,6 +330,18 @@ export default function ChatDetailScreen() {
       
       if (String(messageChatId) === String(chatId)) {
         const messageId = message._id;
+
+        // If this message is from the current user, it's the confirmation of an optimistic message.
+        // Find and remove the oldest temporary message, assuming messages are processed in order.
+        if (String(message.sender._id) === String(currentUserIdRef.current)) {
+          setMessages(prev => {
+            const tempMsgIndex = prev.findIndex(m => m._id.startsWith('temp_'));
+            if (tempMsgIndex > -1) {
+              return prev.filter((_, index) => index !== tempMsgIndex);
+            }
+            return prev;
+          });
+        }
         
         // Debug: log the message to see if quotedMessage is included
         console.log('Message received:', {
@@ -341,7 +370,8 @@ export default function ChatDetailScreen() {
             finalMessage.quotedMessage = {
               _id: quotedMsg._id,
               bodyText: sanitizeMessage(quotedMsg.bodyText || quotedMsg.content || ''),
-              sender: quotedMsg.sender
+              sender: quotedMsg.sender,
+              msgType: quotedMsg.msgType
             };
           }
         }
@@ -559,22 +589,50 @@ const sendMessage = async () => {
   const sanitizedText = sanitizeMessage(newMessage);
   if (!sanitizedText || !currentUserId || !socket || !socketConnected) return;
 
+  // Optimistic UI Update: Immediately add the message to the list.
+  // It will be replaced by the real message from the server later.
+  const tempId = `temp_${Date.now()}`;
+  const optimisticMessage: Message = {
+    _id: tempId,
+    sender: { _id: currentUserId, username: 'You', profilePicture: '' },
+    receiver: { _id: otherUserId, username: otherUsername, profilePicture: '' },
+    bodyText: sanitizedText,
+    content: sanitizedText,
+    msgType: 'text',
+    createdAt: new Date().toISOString(),
+    readBy: [],
+    deliveredTo: [],
+    quotedMessage: quotedMessage ? {
+      _id: quotedMessage._id,
+      bodyText: quotedMessage.bodyText || quotedMessage.content || 'Media',
+      sender: quotedMessage.sender,
+    } : undefined,
+  };
+
+  // If we are replying to a media message specifically, try to preserve that type in the optimistic update
+  if (quotedMessage && quotedMessage.msgType !== 'text' && optimisticMessage.quotedMessage) {
+    optimisticMessage.quotedMessage.msgType = quotedMessage.msgType;
+  }
+
+  setMessages(prev => [...prev, optimisticMessage]);
+  messageIdsRef.current.add(tempId);
+
   try {
-    const messageData: any = {
+    const socketMessageData: any = {
       sender: currentUserId,
       receiver: otherUserId,
       chat: chatId,
       bodyText: sanitizedText,
       content: sanitizedText,
-      msgType: 'text'
+      msgType: 'text',
     };
 
     // Validate quoted message
     if (quotedMessage && quotedMessage._id) {
-      messageData.quotedMsgId = quotedMessage._id;
+      socketMessageData.quotedMsgId = quotedMessage._id;
     }
 
-    socket.emit('new message', messageData);
+    socket.emit('new message', socketMessageData);
 
     // Clear quoted message after sending
     setQuotedMessage(null);
@@ -711,6 +769,26 @@ const sendMessage = async () => {
     setQuotedMessage(message);
   }, []);
 
+  // Handle scroll to original message
+  const handleReplyPress = useCallback((targetMessageId: string) => {
+    // Data passed to FlatList is [...groupedMessages].reverse() because FlatList is inverted
+    // So index 0 is the newest message.
+    const reversedData = [...groupedMessages].reverse();
+    const index = reversedData.findIndex(item => item.type === 'message' && item.data._id === targetMessageId);
+
+    if (index !== -1) {
+      flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+      
+      // Highlight the message
+      setHighlightedMessageId(targetMessageId);
+      setTimeout(() => {
+        setHighlightedMessageId(null);
+      }, 2000);
+    } else {
+      Alert.alert("Notice", "Original message not found in loaded messages.");
+    }
+  }, [groupedMessages]);
+
   const renderItem = useCallback(({ item }: { item: ListItem }) => (
     <MessageItem 
       item={item} 
@@ -718,8 +796,10 @@ const sendMessage = async () => {
       isMessageRead={isMessageRead}
       onLongPress={handleMessageLongPress}
       onSwipeReply={handleSwipeReply}
+      onReplyPress={handleReplyPress}
+      highlightedMessageId={highlightedMessageId}
     />
-  ), [currentUserId, isMessageRead, handleMessageLongPress, handleSwipeReply]);
+  ), [currentUserId, isMessageRead, handleMessageLongPress, handleSwipeReply, handleReplyPress, highlightedMessageId]);
 
   // Render header for loading more indicator
   const renderHeader = useCallback(() => {
@@ -737,7 +817,7 @@ const sendMessage = async () => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={90}
     >
-      {/* Call hover animation overlay */}
+
       {isHoldingTop && (
         <View style={styles.callHoverContainer}>
           <View style={styles.callIconWrapper}>
@@ -764,8 +844,39 @@ const sendMessage = async () => {
         </View>
       )}
 
-      {/* Top Header - now includes username switcher and back navigation */}
-      <TopHeaderComponent />
+      {/* Chat Header */}
+      <View style={styles.chatHeader}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Ionicons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        
+        <View style={styles.headerInfo}>
+          <Text style={styles.partnerName} numberOfLines={1}>{otherUsername || 'User'}</Text>
+          <View style={styles.statusRow}>
+            {otherUserTyping ? (
+              <Text style={styles.typingText}>Typing...</Text>
+            ) : (
+              <>
+                {otherUserStatus.isOnline && <View style={styles.onlineDot} />}
+                <Text style={styles.lastSeen} numberOfLines={1}>
+                  {otherUserStatus.isOnline 
+                    ? 'Online' 
+                    : formatLastSeen(otherUserStatus.lastSeen)}
+                </Text>
+              </>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.headerIcon} onPress={triggerCall}>
+            <Ionicons name="call-outline" size={22} color="#4ADDAE" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerIcon} onPress={() => Alert.alert("Video", "Video calling coming soon")}>
+            <Ionicons name="videocam-outline" size={22} color="#4ADDAE" />
+          </TouchableOpacity>
+        </View>
+      </View>
 
       <FlatList
         ref={flatListRef}
@@ -797,7 +908,7 @@ const sendMessage = async () => {
                 Replying to {String(quotedMessage.sender._id) === String(currentUserId) ? 'yourself' : quotedMessage.sender.username}
               </Text>
               <Text style={styles.replyPreviewText} numberOfLines={1}>
-                {quotedMessage.bodyText || quotedMessage.content || 'Media'}
+                {quotedMessage.msgType === 'image' ? '📷 Photo' : (quotedMessage.msgType === 'video' ? '🎥 Video' : (quotedMessage.bodyText || quotedMessage.content || 'Media'))}
               </Text>
             </View>
             <TouchableOpacity onPress={() => setQuotedMessage(null)} style={styles.cancelReplyButton}>
@@ -837,22 +948,61 @@ const sendMessage = async () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#151718' },
-  header: {
+  chatHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    paddingTop: Platform.OS === 'ios' ? 60 : (StatusBar.currentHeight || 30) + 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#333',
+    borderBottomColor: '#2a2a2a',
     backgroundColor: '#1a1a1a',
   },
-  backButtonContainer: { marginRight: 12 },
-  backButton: { fontSize: 24, color: '#007AFF' },
-  headerInfo: { flex: 1 },
-  statusText: { fontSize: 12, marginTop: 2 },
-  onlineStatus: { color: '#34C759' },
-  offlineStatus: { color: '#8E8E93' },
-  callButtonsContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  callButton: { padding: 8 },
+  backButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  headerInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  partnerName: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  onlineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#34C759',
+    marginRight: 6,
+  },
+  lastSeen: {
+    color: '#8E8E93',
+    fontSize: 13,
+  },
+  typingText: {
+    color: '#4ADDAE',
+    fontSize: 13,
+    marginLeft: 6,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerIcon: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
   messagesList: { flex: 1 },
   messagesContainer: { padding: 16, paddingTop: 8 },
   dateSeparator: { alignItems: 'center', marginVertical: 12 },
@@ -886,6 +1036,10 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     backgroundColor: '#202c33',
     borderBottomLeftRadius: 4,
+  },
+  highlightedMessage: {
+    backgroundColor: '#3b4a54', // A slightly lighter/different shade to indicate highlight
+    transform: [{ scale: 1.02 }],
   },
   messageText: { fontSize: 15, lineHeight: 20 },
   ownMessageText: { color: '#e9edef' },
@@ -941,14 +1095,18 @@ const styles = StyleSheet.create({
   replyPreviewName: { color: '#4ADDAE', fontSize: 12, fontWeight: 'bold', marginBottom: 2 },
   replyPreviewText: { color: '#aaa', fontSize: 14 },
   cancelReplyButton: { padding: 4 },
-  quotedMessageContainer: { borderLeftWidth: 3, paddingLeft: 8, marginBottom: 6 },
-  ownQuotedMessage: { borderLeftColor: '#4ADDAE' },
-  otherQuotedMessage: { borderLeftColor: '#4ADDAE' },
+  quotedMessageContainer: {
+    padding: 8,
+    borderLeftWidth: 3,
+    marginBottom: 6,
+    borderRadius: 6,
+  },
+  ownQuotedMessage: { backgroundColor: 'rgba(0,0,0,0.15)', borderLeftColor: '#87ceeb' },
+  otherQuotedMessage: { backgroundColor: 'rgba(255,255,255,0.05)', borderLeftColor: '#4ADDAE' },
   quotedMessageName: { fontSize: 12, fontWeight: 'bold', marginBottom: 2 },
-  ownQuotedName: { color: '#4ADDAE' },
+  ownQuotedName: { color: '#87ceeb' },
   otherQuotedName: { color: '#4ADDAE' },
   quotedMessageText: { fontSize: 13 },
-  ownQuotedText: { color: '#a8c7bb' },
-  otherQuotedText: { color: '#aaa' },
+  ownQuotedText: { color: '#e0e0e0' },
+  otherQuotedText: { color: '#c0c0c0' },
 });
-
