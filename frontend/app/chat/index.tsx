@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, memo } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, RefreshControl, ActivityIndicator, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
@@ -66,14 +66,32 @@ const ChatItem = memo(({
     return isFromMe ? `You: ${item.lastMessage.text}` : item.lastMessage.text;
   };
 
+  const avatarUri = otherParticipant?.profilePicture || `https://i.pravatar.cc/150?u=${otherParticipant?.username || ''}`;
+  const formatLastMessagePreview = (text: string) => {
+    if (text.length > 60) return text.slice(0, 60) + '…';
+    return text;
+  };
+
   return (
-    <TouchableOpacity style={styles.chatItem} onPress={onPress}>
+    <TouchableOpacity style={styles.chatItem} onPress={onPress} activeOpacity={0.7}>
+      {/* Avatar */}
+      <View style={styles.avatarContainer}>
+        <Image 
+          source={{ uri: avatarUri }}
+          style={styles.avatar}
+        />
+        {item.unreadCount > 0 && <View style={styles.unreadDot} />}
+      </View>
+      
+      {/* Info */}
       <View style={styles.chatInfo}>
         <View style={styles.chatHeader}>
-          <ThemedText type="subtitle">{otherParticipant?.username || 'Unknown'}</ThemedText>
-          {item.lastMessage?.createdAt && (
-            <Text style={styles.timestamp}>{formatRelativeTime(item.lastMessage.createdAt)}</Text>
-          )}
+          <ThemedText type="subtitle" style={styles.username} numberOfLines={1} ellipsizeMode="tail">
+            {otherParticipant?.username || 'Unknown User'}
+          </ThemedText>
+          <Text style={styles.timestamp}>
+            {formatRelativeTime(item.updatedAt)}
+          </Text>
         </View>
         <View style={styles.messageRow}>
           <Text style={[styles.lastMessage, isFromMe && styles.ownMessagePreview, item.unreadCount > 0 && styles.unreadMessage]} numberOfLines={1}>
@@ -217,25 +235,166 @@ export default function ChatListScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  title: { marginBottom: 16 },
-  chatItem: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  chatInfo: { flex: 1 },
-  chatHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  timestamp: { color: '#888', fontSize: 12 },
-  messageRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  lastMessage: { color: '#666', fontSize: 14, flex: 1, marginRight: 8 },
-  ownMessagePreview: { color: '#888' },
-  unreadMessage: { fontWeight: 'bold', color: '#000' },
-  rightSection: { flexDirection: 'row', alignItems: 'center' },
-  unreadBadge: { backgroundColor: '#007AFF', borderRadius: 10, minWidth: 20, height: 20, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6 },
-  unreadText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
-  readStatus: { color: '#007AFF', fontSize: 14, marginLeft: 8 },
+  container: { 
+    flex: 1, 
+    padding: 4,
+    backgroundColor: '#f5f5f5'
+  },
+  avatarContainer: {
+    position: 'relative',
+    marginRight: 16
+  },
+  avatar: { 
+    width: 56, 
+    height: 56, 
+    borderRadius: 28,
+    backgroundColor: '#f0f0f0'
+  },
+  unreadDot: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#007AFF',
+    borderWidth: 3,
+    borderColor: 'white'
+  },
+  username: {
+    fontWeight: '700',
+    fontSize: 17,
+    flex: 1
+  },
+  loadingContainer: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  title: { 
+    margin: 16, 
+    fontSize: 28, 
+    fontWeight: 'bold',
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0'
+  },
+  chatItem: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    padding: 16, 
+    marginHorizontal: 12,
+    marginVertical: 4,
+    backgroundColor: 'white',
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  avatarContainer: {
+    position: 'relative',
+    marginRight: 16
+  },
+  avatar: { 
+    width: 56, 
+    height: 56, 
+    borderRadius: 28,
+    backgroundColor: '#f0f0f0'
+  },
+  unreadDot: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#007AFF',
+    borderWidth: 3,
+    borderColor: 'white'
+  },
+  chatInfo: { 
+    flex: 1 
+  },
+  chatHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'flex-end',
+    marginBottom: 4 
+  },
+  username: {
+    fontWeight: '700',
+    fontSize: 17,
+    flex: 1
+  },
+  timestamp: { 
+    color: '#8e8e93', 
+    fontSize: 13,
+    marginLeft: 12
+  },
+  messageRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center',
+    justifyContent: 'space-between' 
+  },
+  lastMessage: { 
+    color: '#8e8e93', 
+    fontSize: 15, 
+    flex: 1 
+  },
+  ownMessagePreview: { 
+    color: '#007AFF' 
+  },
+  unreadMessage: { 
+    fontWeight: '600' 
+  },
+  rightSection: { 
+    flexDirection: 'row', 
+    alignItems: 'center',
+    minWidth: 40
+  },
+  unreadBadge: { 
+    backgroundColor: '#FF3B30', 
+    borderRadius: 12, 
+    minWidth: 24, 
+    height: 24, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  unreadText: { 
+    color: 'white', 
+    fontSize: 12, 
+    fontWeight: 'bold',
+    textAlign: 'center'
+  },
+  readStatus: { 
+    color: '#007AFF', 
+    fontSize: 15, 
+    marginLeft: 8 
+  },
   emptyListContent: { flex: 1 },
-  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingBottom: 100 },
-  emptyIcon: { fontSize: 48, marginBottom: 16 },
-  emptyTextTitle: { marginBottom: 8 },
-  emptyTextSub: { color: '#888', fontSize: 14, textAlign: 'center' },
+  emptyContainer: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    paddingHorizontal: 40 
+  },
+  emptyIcon: { 
+    fontSize: 72, 
+    marginBottom: 24 
+  },
+  emptyTextTitle: { 
+    fontSize: 22, 
+    fontWeight: '600',
+    marginBottom: 8,
+    textAlign: 'center'
+  },
+  emptyTextSub: { 
+    color: '#8e8e93', 
+    fontSize: 17, 
+    textAlign: 'center',
+    lineHeight: 24 
+  },
 });
 

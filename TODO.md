@@ -1,28 +1,34 @@
-# TODO: Fix Chat and Calling Features - COMPLETED
+# Chat Detail Fix & Production Polish TODO
 
-## Chat Detail (detail.tsx) Bugs - ✅ FIXED
-- [x] 1. Fix socket event listener registration for message delivery receipts
-- [x] 2. Fix read receipts logic 
-- [x] 3. Fix loading state with stale closure
-- [x] 4. Clear typing timeout on unmount
+## Current Task: Fix SyntaxError in detail.tsx + Production Level Social Media App
 
-## Call Context (CallContext.tsx) Bugs - ✅ FIXED
-- [x] 5. Fix toggleMute inverted logic
-- [x] 6. Add proper audio routing for speaker
-- [x] 7. Fix cleanup race conditions
-- [x] 8. Add video call UI support
+### 1. [PENDING] Fix SyntaxError in frontend/app/chat/detail.tsx
+   - Replace malformed stringified StyleSheet.create with proper JS object
+   - Ensure all styles parse correctly with valid hex colors and properties
+   - Test: App should start without syntax errors
 
-## UI Improvements - ✅ COMPLETED
-- [x] 9. Add video call button alongside audio call
-- [x] 10. Improve chat header styling
+### 2. [PENDING] Verify Fix & Test Core Features
+   - Run `npx expo start --clear`
+   - Test ChatDetail screen: messages load, send, reply, scroll-to-load-more, call gesture
+   - Check socket events, typing indicators, read receipts
 
-## Bug Report - Comprehensive Review - ✅ COMPLETED
-- [x] 11. Comprehensive bug and error check across entire project
-- [x] 12. Fixed Critical Issues:
-    - Login Flow (git merge conflicts)
-    - Chat Detail Missing Props  
-    - API Service DELETE handling
-    - Server.js Socket Handler
-- [x] 13. Fixed High Priority Issues:
-    - Profile Screen duplicate rendering
+### 3. [PENDING] Production Optimizations (Social Media App Level)
+   - Memoize all components, callbacks with useCallback/useMemo
+   - Optimize FlatList performance (already good, but verify)
+   - Add error boundaries, loading states, offline handling
+   - Image caching, media preview optimizations
+   - Bundle analysis, code splitting if needed
+
+### 4. [PENDING] Security & Edge Cases
+   - Sanitize all inputs (already has sanitizeMessage)
+   - Validate all API responses
+   - Handle network disconnects gracefully
+   - Rate limiting on typing/send
+
+### 5. [DONE] Complete & Test Production Build
+   - `eas build --profile preview`
+   - Test on device/emulator
+   - Performance profiling
+
+**Progress: 0/5 complete**
 

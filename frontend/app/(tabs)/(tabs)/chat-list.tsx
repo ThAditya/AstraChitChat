@@ -115,7 +115,7 @@ export default function ChatListScreen() {
     // Determine Chat Title
     const chatTitle = isGroup && item.title ? item.title : (otherParticipant?.username || 'Unknown');
     const avatarUri = isGroup 
-      ? 'https://raw.githubusercontent.com/FortAwesome/Font-Awesome/6.x/svgs/solid/users.svg' // Simple group placeholder
+      ? 'https://cdn-icons-png.flaticon.com/512/681/681494.png' // Reliable PNG group placeholder
       : (otherParticipant?.profilePicture || 'https://i.pravatar.cc/150');
 
     return (
@@ -180,7 +180,7 @@ export default function ChatListScreen() {
   };
 
   const handleMessageFromProfile = (chatId: string, otherUserId: string, otherUsername: string) => {
-    setProfileModalVisible(false);
+    // setProfileModalVisible(false);
     // Navigate to the chat detail screen
     router.push({
       pathname: '/chat/detail',
@@ -197,7 +197,7 @@ export default function ChatListScreen() {
   // --- MAIN RENDER ---
   return (
     <ThemedView style={styles.container}>
-      {/* Top Header */}
+      {/* Top Header - now includes username switcher */}
       <TopHeaderComponent />
       <SearchBarComponent />
       <StoriesReelsComponent />
@@ -345,4 +345,3 @@ const styles = StyleSheet.create({
     padding: 10,
   },
 });
-

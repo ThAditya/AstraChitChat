@@ -140,34 +140,78 @@ async function getChats(req, res) {
  *   oldestMessageId: string | null
  * }
  */
+// ✅ PERF: Optimized getChatMessages - Lean queries + aggregate pipeline
 async function getChatMessages(req, res) {
   try {
     const { chatId } = req.params;
-    const { limit, beforeMessageId } = req.query;
+    const { limit = '30', beforeMessageId } = req.query;
     const userId = req.user._id.toString();
 
-    const pageSize = Math.min(parseInt(limit) || 30, 100); // Default 30, max 100
+    const pageSize = Math.min(parseInt(limit), 100);
 
-    const chat = await Chat.findById(chatId).populate('participants.user', 'name username profilePicture');
-    if (!chat) return res.status(404).json({ message: 'Chat not found' });
+    // Fast auth check first
+    const chat = await Chat.findOne({ 
+      _id: toObjectId(chatId), 
+      'participants.user': toObjectId(userId) 
+    }).lean();
+    
+    if (!chat) return res.status(403).json({ message: 'Chat not authorized or not found' });
 
-    // ensure user is participant
-    const participantIndex = chat.participants.findIndex(p => {
-      const uid = p.user && p.user._id ? p.user._id.toString() : (p.user ? p.user.toString() : null);
-      return uid === userId;
-    });
-    if (participantIndex === -1) return res.status(403).json({ message: 'Not authorized to view this chat' });
-
-    // Build query for messages
-    let messageQuery = { chat: toObjectId(chatId) };
-
-    // If beforeMessageId is provided, get messages older than this one
-    if (beforeMessageId) {
-      const beforeMsg = await Message.findById(beforeMessageId);
-      if (beforeMsg) {
-        messageQuery.createdAt = { $lt: beforeMsg.createdAt };
-      }
-    }
+    // ✅ PERF: Single aggregate pipeline replaces 3x populate queries
+    const pipeline = [
+      { $match: { chat: toObjectId(chatId) } },
+      ...(beforeMessageId ? [{ $match: { createdAt: { $lt: new Date(beforeMessageId) } } }] : []),
+      { $sort: { createdAt: -1 } },
+      { $limit: pageSize + 1 },
+      { 
+        $lookup: {
+          from: 'users',
+          localField: 'sender',
+          foreignField: '_id',
+          as: 'sender',
+          pipeline: [{ $project: { name: 1, username: 1, profilePicture: 1 } }]
+        }
+      },
+      { $unwind: '$sender' },
+      {
+        $lookup: {
+          from: 'messages',
+          localField: 'quotedMsgId',
+          foreignField: '_id',
+          as: 'quotedMessage',
+          pipeline: [
+            {
+              $lookup: {
+                from: 'users',
+                localField: 'sender',
+                foreignField: '_id',
+                as: 'sender',
+                pipeline: [{ $project: { name: 1, username: 1, profilePicture: 1 } }]
+              }
+            },
+            { $unwind: { path: '$sender', preserveNullAndEmptyArrays: true } },
+            { $project: { _id: 1, bodyText: 1, sender: 1, msgType: 1 } }
+          ]
+        }
+      },
+      { $unwind: { path: '$quotedMessage', preserveNullAndEmptyArrays: true } },
+      { $addFields: { 
+        readBy: { 
+          $map: {
+            input: '$readBy',
+            as: 'read',
+            in: '$$read.user'
+          }
+        },
+        deliveredTo: {
+          $map: {
+            input: '$deliveredTo',
+            as: 'delivered',
+            in: '$$delivered.user'
+          }
+        }
+      } }
+    ];
 
     // Fetch messages - always sort by createdAt descending to get the newest messages in the range
     const sortOrder = { createdAt: -1 };
@@ -181,53 +225,37 @@ async function getChatMessages(req, res) {
       .sort(sortOrder)
       .limit(pageSize + 1) // Fetch one extra to check if there are more
       .lean();
+    const messages = await Message.aggregate(pipeline);
 
-    // Check if there are more messages
     let hasMore = false;
     let oldestMessageId = null;
 
     if (messages.length > pageSize) {
       hasMore = true;
-      messages.pop(); // Remove the extra older message
+      messages.pop();
     }
 
-    // Reverse the array so it's in chronological order (oldest to newest)
-    // The frontend FlatList inverted expects chronological order to group dates properly
-    messages.reverse();
-
-    // Get the oldest message ID (now it's always the first element after reversing)
+    messages.reverse(); // Chronological order for frontend
     if (messages.length > 0) {
-      oldestMessageId = messages[0]._id.toString();
+      oldestMessageId = messages[0]._id;
     }
 
-    // Only update lastReadMsgId on initial load (not when fetching older messages)
+    // Mark read on initial load (batch update)
     if (!beforeMessageId && messages.length > 0) {
-      const lastMsg = messages[messages.length - 1];
+      const lastMsgId = messages[messages.length - 1]._id;
+      
+      await Chat.updateOne(
+        { _id: toObjectId(chatId), 'participants.user': toObjectId(userId) },
+        { 
+          $set: { 'participants.$.lastReadMsgId': toObjectId(lastMsgId) },
+          $set: { [`unreadCount.${userId}`]: 0 }
+        }
+      );
 
-      // Update participant.lastReadMsgId only if different
-      const existingLastRead = chat.participants[participantIndex].lastReadMsgId;
-      if (!existingLastRead || existingLastRead.toString() !== lastMsg._id.toString()) {
-        chat.participants[participantIndex].lastReadMsgId = toObjectId(lastMsg._id);
-        chat.markModified('participants');
-      }
-
-      // Reset the unreadCount badge for this user using Map
-      if (chat.unreadCount && chat.unreadCount.has(userId) && chat.unreadCount.get(userId) > 0) {
-        chat.unreadCount.set(userId, 0);
-      } else if (!chat.unreadCount) {
-        chat.unreadCount = new Map();
-        chat.unreadCount.set(userId, 0);
-      }
-
-      await chat.save();
-
-      // Add current user to last message's readBy (if not present)
-      const lastMsgDoc = await Message.findById(lastMsg._id);
-      const alreadyRead = lastMsgDoc.readBy && lastMsgDoc.readBy.some(r => r.user.toString() === userId);
-      if (!alreadyRead) {
-        lastMsgDoc.readBy.push({ user: toObjectId(userId), readAt: new Date() });
-        await lastMsgDoc.save();
-      }
+      await Message.updateOne(
+        { _id: toObjectId(lastMsgId), 'readBy.user': { $ne: toObjectId(userId) } },
+        { $push: { readBy: { user: toObjectId(userId), readAt: new Date() } } }
+      );
     }
 
     // convert readBy and deliveredTo structure to simple array of userIds for API (per your request)
@@ -254,13 +282,13 @@ async function getChatMessages(req, res) {
     });
 
     return res.json({
-      messages: responseMessages,
+      messages,
       hasMore,
-      oldestMessageId
+      oldestMessageId: oldestMessageId?.toString()
     });
   } catch (error) {
-    console.error('getMessages error:', error);
-    return res.status(500).json({ message: 'Server error: could not fetch messages', error: error.message });
+    console.error('getChatMessages error:', error);
+    return res.status(500).json({ message: 'Server error', error: error.message });
   }
 }
 

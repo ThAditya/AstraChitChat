@@ -126,4 +126,11 @@ const messageSchema = new mongoose.Schema({
     timestamps: true
 });
 
+// ✅ PRODUCTION INDEXES - Critical for chat pagination performance
+messageSchema.index({ chat: 1, createdAt: -1 });           // Primary chat timeline
+messageSchema.index({ sender: 1, createdAt: -1 });         // User message history  
+messageSchema.index({ chat: 1, 'readBy.user': 1 });        // Read receipts queries
+messageSchema.index({ chat: 1, quotedMsgId: 1 });          // Quote lookups
+messageSchema.index({ unsentAt: 1 });                      // Cleanup unsent msgs
+
 module.exports = mongoose.model('Message', messageSchema);

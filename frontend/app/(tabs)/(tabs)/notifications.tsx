@@ -6,7 +6,6 @@ import { ThemedText } from '@/components/themed-text';
 import { get } from '@/services/api';
 import TopHeaderComponent from '@/components/TopHeaderComponent';
 
-// --- INTERFACE ---
 interface Notification {
   _id: string;
   type: 'like' | 'comment' | 'follow' | 'mention' | 'system';
@@ -63,11 +62,10 @@ export default function NotificationsScreen() {
       setPage(pageNum);
     } catch (error: any) {
       console.error('API Error:', error.response?.data || error.message);
-      // Properly set as empty or use mock data without getting stuck in a loading loop
       if (isRefresh || pageNum === 1) {
         setNotifications(getMockNotifications());
       }
-      setHasMore(false); // Make sure we dont try to load more if it fails
+      setHasMore(false);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -88,20 +86,17 @@ export default function NotificationsScreen() {
   }, [loading, hasMore, page]);
 
   const handleNotificationPress = (notification: Notification) => {
-    // Mark as read
     if (!notification.read) {
       setNotifications(prev =>
         prev.map(n => n._id === notification._id ? { ...n, read: true } : n)
       );
     }
 
-    // Navigate based on notification type
     switch (notification.type) {
       case 'like':
       case 'comment':
       case 'mention':
         if (notification.post) {
-          // Navigate to post detail
           router.push({ pathname: '/', params: { postId: notification.post._id } });
         }
         break;
@@ -117,16 +112,11 @@ export default function NotificationsScreen() {
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
-      case 'like':
-        return '❤️';
-      case 'comment':
-        return '💬';
-      case 'follow':
-        return '👤';
-      case 'mention':
-        return '@';
-      default:
-        return '📢';
+      case 'like': return '❤️';
+      case 'comment': return '💬';
+      case 'follow': return '👤';
+      case 'mention': return '@';
+      default: return '📢';
     }
   };
 
@@ -138,7 +128,6 @@ export default function NotificationsScreen() {
     const minutes = Math.floor(diff / 60000);
     const hours = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);
-
     if (minutes < 1) return 'Just now';
     if (minutes < 60) return `${minutes}m ago`;
     if (hours < 24) return `${hours}h ago`;
@@ -163,9 +152,7 @@ export default function NotificationsScreen() {
 
       <View style={styles.content}>
         <Text style={styles.message}>
-          {item.from ? (
-            <Text style={styles.username}>{item.from.username}</Text>
-          ) : null}
+          {item.from ? <Text style={styles.username}>{item.from.username}</Text> : null}
           {' '}{item.message}
         </Text>
         <Text style={styles.time}>{formatTime(item.createdAt)}</Text>
@@ -184,9 +171,7 @@ export default function NotificationsScreen() {
         style={styles.followRequestBanner}
         onPress={() => router.push('/profile/follow-requests')}
       >
-        <Text style={styles.followRequestText}>
-          Follow Requests ({followRequestsCount})
-        </Text>
+        <Text style={styles.followRequestText}>Follow Requests ({followRequestsCount})</Text>
         <Text style={styles.followRequestArrow}>→</Text>
       </TouchableOpacity>
     );
@@ -224,9 +209,9 @@ export default function NotificationsScreen() {
     );
   }
 
-  // --- MAIN RENDER ---
   return (
     <ThemedView style={styles.container}>
+      {/* Top Header with username switcher */}
       <TopHeaderComponent />
 
       <FlatList
@@ -234,12 +219,7 @@ export default function NotificationsScreen() {
         renderItem={renderNotification}
         keyExtractor={(item) => item._id}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor="#4ADDAE"
-            colors={['#4ADDAE']}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#4ADDAE" colors={['#4ADDAE']} />
         }
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.5}
@@ -252,64 +232,15 @@ export default function NotificationsScreen() {
   );
 }
 
-// --- MOCK DATA ---
 function getMockNotifications(): Notification[] {
   return [
-    {
-      _id: '1',
-      type: 'like',
-      from: {
-        _id: 'user1',
-        username: 'john_doe',
-        profilePicture: 'https://via.placeholder.com/50'
-      },
-      post: {
-        _id: 'post1',
-        mediaUrl: 'https://via.placeholder.com/50'
-      },
-      message: 'liked your post',
-      createdAt: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-      read: false
-    },
-    {
-      _id: '2',
-      type: 'comment',
-      from: {
-        _id: 'user2',
-        username: 'jane_smith',
-        profilePicture: 'https://via.placeholder.com/50'
-      },
-      post: {
-        _id: 'post2',
-        mediaUrl: 'https://via.placeholder.com/50'
-      },
-      message: 'commented: "Great photo!"',
-      createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-      read: false
-    },
-    {
-      _id: '3',
-      type: 'follow',
-      from: {
-        _id: 'user3',
-        username: 'alex_wilson',
-        profilePicture: 'https://via.placeholder.com/50'
-      },
-      message: 'started following you',
-      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-      read: true
-    },
-    {
-      _id: '4',
-      type: 'system',
-      message: 'Welcome to AstraChitChat! Start connecting with friends.',
-      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-      read: true
-    }
+    { _id: '1', type: 'like', from: { _id: 'user1', username: 'john_doe', profilePicture: 'https://via.placeholder.com/50' }, post: { _id: 'post1', mediaUrl: 'https://via.placeholder.com/50' }, message: 'liked your post', createdAt: new Date(Date.now() - 1000 * 60 * 5).toISOString(), read: false },
+    { _id: '2', type: 'comment', from: { _id: 'user2', username: 'jane_smith', profilePicture: 'https://via.placeholder.com/50' }, post: { _id: 'post2', mediaUrl: 'https://via.placeholder.com/50' }, message: 'commented: "Great photo!"', createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(), read: false },
+    { _id: '3', type: 'follow', from: { _id: 'user3', username: 'alex_wilson', profilePicture: 'https://via.placeholder.com/50' }, message: 'started following you', createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), read: true },
+    { _id: '4', type: 'system', message: 'Welcome to AstraChitChat! Start connecting with friends.', createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), read: true }
   ];
 }
 
-// --- STYLES ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -422,4 +353,26 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 40,
   },
+  container: { flex: 1, backgroundColor: '#000' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { color: '#888', marginTop: 10, fontSize: 16 },
+  followRequestBanner: { padding: 16, backgroundColor: '#111', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#333' },
+  followRequestText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  followRequestArrow: { color: '#4ADDAE', fontSize: 18, fontWeight: 'bold' },
+  notificationItem: { flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderBottomColor: '#222', backgroundColor: '#000' },
+  unreadItem: { backgroundColor: '#111' },
+  iconContainer: { marginRight: 12 },
+  avatar: { width: 48, height: 48, borderRadius: 24 },
+  avatarPlaceholder: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#222', justifyContent: 'center', alignItems: 'center' },
+  iconText: { fontSize: 20 },
+  content: { flex: 1 },
+  username: { fontWeight: 'bold', color: '#fff' },
+  message: { color: '#ccc', fontSize: 14 },
+  time: { color: '#666', fontSize: 12, marginTop: 4 },
+  thumbnail: { width: 48, height: 48, borderRadius: 8, marginLeft: 8 },
+  footer: { padding: 20, alignItems: 'center' },
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 100 },
+  emptyIcon: { fontSize: 64, marginBottom: 16 },
+  emptyText: { fontSize: 18, color: '#fff', fontWeight: 'bold', marginBottom: 8 },
+  emptySubtext: { fontSize: 14, color: '#666', textAlign: 'center', paddingHorizontal: 40 },
 });
