@@ -445,7 +445,13 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children, onAuth
       socketRef.current = newSocket;
 
       newSocket.on("connect", async () => {
-        console.log('[Socket] Connected successfully');
+        const transport = newSocket.io.engine.transport.name;
+        console.log('[Socket] Connected successfully using transport:', transport);
+        
+        if (transport === 'polling') {
+          console.warn('[Socket] ⚠️ Using polling fallback - WebSocket may be blocked or unavailable');
+        }
+        
         setIsConnected(true);
         setIsOnline(true);
         initializedRef.current = true;
@@ -519,9 +525,26 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children, onAuth
         }
       });
 
-      // ✅ ENHANCED: Reconnection attempt handler
-      newSocket.on("reconnect_attempt", () => {
+      // ✅ ENHANCED: Reconnection attempt handler with token refresh
+      newSocket.on("reconnect_attempt", async () => {
         console.log('[Socket] Reconnection attempt in progress...');
+        
+        // Refresh token before attempting reconnection
+        try {
+          const freshToken = await secureTokenManager.getToken();
+          
+          if (freshToken) {
+            (newSocket.auth as any).token = freshToken;
+            console.log('[Socket] Token refreshed for reconnection attempt');
+          } else {
+            console.warn('[Socket] No token available for reconnection');
+            // Clear auth to stop reconnection attempts
+            newSocket.disconnect();
+          }
+        } catch (error) {
+          console.error('[Socket] Error refreshing token on reconnection attempt:', error);
+          newSocket.disconnect();
+        }
       });
 
       // ✅ ENHANCED: Reconnection success handler
@@ -578,7 +601,8 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children, onAuth
         });
       });
 
-      newSocket.on("conversationUpdated", updateConversation);
+      // ✅ NOTE: conversationUpdated listener is registered in useEffect (not here)
+      // to avoid duplicate registrations
 
       setSocket(newSocket);
     } catch (error) {

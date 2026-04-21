@@ -62,7 +62,7 @@ export default function StoryViewer({
   const [viewers, setViewers] = useState<any[]>([]);
   const [isLoadingViewers, setIsLoadingViewers] = useState(false);
   const progressAnim = useRef(new Animated.Value(0)).current;
-  const storyTimeout = useRef<NodeJS.Timeout | null>(null);
+  const storyTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentStory = stories[currentIndex];
 

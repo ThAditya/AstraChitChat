@@ -170,7 +170,22 @@ const io = new Server(server, {
     pingTimeout: 120000,
     pingInterval: 25000,
     cors: {
-        origin: socketOrigins,
+        origin: (origin, callback) => {
+            // Allow if no origin (same-origin) or if in whitelist
+            // Handle both exact match and with/without trailing slash
+            if (!origin || socketOrigins.some(allowed => {
+                if (allowed === origin) return true;
+                // Compare without trailing slashes
+                const normalizedAllowed = allowed.replace(/\/$/, '');
+                const normalizedOrigin = origin.replace(/\/$/, '');
+                return normalizedAllowed === normalizedOrigin;
+            })) {
+                callback(null, true);
+            } else {
+                console.warn(`[CORS] Blocked WebSocket origin: ${origin}`);
+                callback(new Error('CORS not allowed'));
+            }
+        },
         methods: ['GET', 'POST'],
         credentials: true,
     },

@@ -17,7 +17,9 @@ import {
   type Chat as ChatType 
 } from '@/utils/chatDataHelpers';
 
-interface Chat extends ChatType {}
+interface Chat extends ChatType {
+  updatedAt?: string;
+}
 
 // Platform-specific FlatList configuration for Android optimization
 const getFlatListConfig = () => {
@@ -147,7 +149,7 @@ const ChatItem = memo(({
             // Avatar loaded successfully
           }}
         />
-        {item.unreadCount > 0 && <View style={styles.unreadDot} />}
+        {(item.unreadCount ?? 0) > 0 && <View style={styles.unreadDot} />}
       </View>
       
       {/* Info */}
@@ -161,13 +163,13 @@ const ChatItem = memo(({
           </Text>
         </View>
         <View style={styles.messageRow}>
-          <Text style={[styles.lastMessage, { color: colors.textSecondary }, isFromMe && { color: colors.tint }, item.unreadCount > 0 && styles.unreadMessage]} numberOfLines={1}>
+          <Text style={[styles.lastMessage, { color: colors.textSecondary }, isFromMe && { color: colors.tint }, (item.unreadCount ?? 0) > 0 && styles.unreadMessage]} numberOfLines={1}>
             {formatLastMessagePreview(memoizedLastMessage)}
           </Text>
           <View style={styles.rightSection}>
-            {item.unreadCount > 0 && (
+            {(item.unreadCount ?? 0) > 0 && (
               <View style={styles.unreadBadge}>
-                <Text style={styles.unreadText}>{item.unreadCount > 99 ? '99+' : item.unreadCount}</Text>
+                <Text style={styles.unreadText}>{(item.unreadCount ?? 0) > 99 ? '99+' : item.unreadCount}</Text>
               </View>
             )}
 {isFromMe && <Text style={styles.readStatus}>✓✓</Text>}
@@ -197,7 +199,7 @@ export default function ChatListScreen() {
   const { conversations, setConversations, currentUserId, socket } = useSocket();
   const router = useRouter();
   // Cast conversations to Chat[] for type safety in this component
-  const chats = conversations as Chat[];
+  const chats = conversations as unknown as Chat[];
 
   // Get platform-specific FlatList configuration
   const flatListConfig = useMemo(() => getFlatListConfig(), []);
@@ -249,10 +251,10 @@ export default function ChatListScreen() {
         const sorted = uniqueChats.sort((a: Chat, b: Chat) => {
           const aTime = a.lastMessage?.createdAt 
             ? new Date(a.lastMessage.createdAt).getTime() 
-            : new Date(a.lastActivityTimestamp || a.updatedAt).getTime();
+            : new Date(a.lastActivityTimestamp || a.updatedAt || 0).getTime();
           const bTime = b.lastMessage?.createdAt 
             ? new Date(b.lastMessage.createdAt).getTime() 
-            : new Date(b.lastActivityTimestamp || b.updatedAt).getTime();
+            : new Date(b.lastActivityTimestamp || b.updatedAt || 0).getTime();
           return bTime - aTime;
         });
         setConversations(sorted as any); // Cast to any to handle SocketContext Conversation type

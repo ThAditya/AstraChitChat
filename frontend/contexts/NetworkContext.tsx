@@ -6,10 +6,11 @@ export interface NetworkStatus {
   isInternetReachable: boolean | null;
 }
 
-interface NetworkContextType {
+export interface NetworkContextType {
   networkStatus: NetworkStatus;
   isOnline: boolean;
   isOffline: boolean;
+  checkConnection: () => Promise<boolean>;
 }
 
 const NetworkContext = createContext<NetworkContextType | undefined>(undefined);
@@ -38,10 +39,25 @@ export const NetworkProvider: React.FC<NetworkProviderProps> = ({ children }) =>
     return () => unsubscribe();
   }, []);
 
+  const checkConnection = async (): Promise<boolean> => {
+    try {
+      const state = await NetInfo.fetch();
+      const isReachable = state.isInternetReachable ?? false;
+      setNetworkStatus({
+        isConnected: state.isConnected ?? false,
+        isInternetReachable: state.isInternetReachable ?? null,
+      });
+      return isReachable;
+    } catch {
+      return false;
+    }
+  };
+
   const value: NetworkContextType = {
     networkStatus,
     isOnline: networkStatus.isInternetReachable === true,
     isOffline: networkStatus.isInternetReachable === false,
+    checkConnection,
   };
 
   return (

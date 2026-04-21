@@ -203,7 +203,7 @@ export default function NotificationsScreen() {
           // For single follow, go to profile; for multiple, show a list or go to followers
           const userId = notification.users[0]?._id;
           if (userId) {
-            router.push({ pathname: '/(tabs)/(tabs)/other-profile', params: { userId } });
+            router.push({ pathname: '/(tabs)/other-profile', params: { userId } });
           }
         }
         break;

@@ -176,8 +176,8 @@ const VideoCard = memo(({
   isExpanded: boolean;
   onToggleExpand: () => void;
 }) => {
-  const postData = formatPostForDisplay(item);
-  const stats = getPostStats(item);
+  const postData = formatPostForDisplay(item as any);
+  const stats = getPostStats(item as any);
   
   return (
     <TouchableOpacity
@@ -189,7 +189,7 @@ const VideoCard = memo(({
     >
       <View style={vcStyles.thumbnailOuter}>
         <Image
-          source={{ uri: getPostImageUrl(item) }}
+          source={{ uri: getPostImageUrl(item as any) || undefined }}
           style={vcStyles.thumbnailInner}
           resizeMode="cover"
         />
@@ -209,7 +209,7 @@ const VideoCard = memo(({
 
       <View style={vcStyles.infoRow}>
         <Image
-          source={{ uri: postData.author.avatar }}
+          source={{ uri: postData.author.profilePicture || undefined }}
           style={vcStyles.avatar}
         />
         <View style={vcStyles.textBlock}>
@@ -231,7 +231,7 @@ const VideoCard = memo(({
             {postData.author.username}
           </Text>
           <Text style={[vcStyles.meta, { color: colors.textTertiary }]}>
-            {formatViewCount(stats.likes)} · {getPostTimeAgo(item)}
+            {formatViewCount(stats.likes)} · {getPostTimeAgo(item as any)}
           </Text>
         </View>
         <TouchableOpacity
@@ -465,13 +465,13 @@ export default function ExploreScreen() {
       
       const first = displayData[0];
       if (first) {
-        const postData = formatPostForDisplay(first);
+        const postData = formatPostForDisplay(first as any);
         console.log('📄 First post formatted:', {
           id: first._id,
           caption: postData.caption.substring(0, 50),
           author: postData.author.username,
           imageUrl: postData.imageUrl,
-          mediaType: getPostMediaType(first),
+          mediaType: getPostMediaType(first as any),
         });
       }
     }
