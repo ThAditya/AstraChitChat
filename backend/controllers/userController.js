@@ -33,11 +33,41 @@ const searchUsers = async (req, res) => {
         { name: { $regex: q, $options: 'i' } },
       ],
     })
-      .select('username name profilePicture isOnline lastSeen')
+      .select('username name profilePicture profilePublicId isOnline lastSeen')
       .limit(20);
 
-    // Apply lazy defaults to all returned users
-    const usersWithDefaults = users.map(user => applyUserDefaults(user));
+    const CLOUDINARY_CLOUD = process.env.CLOUDINARY_CLOUD_NAME || 'astrachat';
+
+    // Helper: build Cloudinary URL with transformations
+    function buildCloudinaryUrl(publicId, opts = {}) {
+        if (!publicId) return '';
+        const { width, height, crop = 'fill', gravity, radius, quality = 'auto', format = 'auto' } = opts;
+        const transforms = [
+            width    && `w_${width}`,
+            height   && `h_${height}`,
+            crop     && `c_${crop}`,
+            gravity  && `g_${gravity}`,
+            radius   && `r_${radius}`,
+            `q_${quality}`,
+            `f_${format}`,
+        ].filter(Boolean).join(',');
+
+        return `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/image/upload/${transforms}/${publicId}`;
+    }
+
+    // Apply lazy defaults and format profile picture
+    const usersWithDefaults = users.map(user => {
+      const enriched = applyUserDefaults(user);
+      const profilePublicId = enriched.profilePublicId || enriched.profilePicture?.public_id;
+      const profilePictureUrl = profilePublicId
+          ? buildCloudinaryUrl(profilePublicId, { width: 400, height: 400, gravity: 'face', radius: 'max' })
+          : '';
+
+      return {
+        ...enriched,
+        profilePicture: profilePictureUrl
+      };
+    });
 
     res.json({ users: usersWithDefaults });
   } catch (error) {
