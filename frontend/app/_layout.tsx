@@ -1,10 +1,6 @@
 import React, { useEffect } from 'react';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-<<<<<<< HEAD
 import { Stack, useRouter, useSegments } from 'expo-router';
-=======
-import { Stack, useRouter } from 'expo-router';
->>>>>>> 3048fa3dee78a4536b127e4c9457cbf4188e13b8
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -109,22 +105,8 @@ function RootLayoutContent() {
   const colorScheme = useColorScheme();
   const colors = useTheme();
   const { isLoading, isSignedIn } = useAuth();
-<<<<<<< HEAD
   const segments = useSegments();
   const router = useRouter();
-=======
-  const router = useRouter();
-
-  // ✅ FIX: Force navigation to login if not signed in
-  // This ensures that even if screens were previously rendered, we navigate to login
-  // Must be before the early return to follow React Rules of Hooks
-  useEffect(() => {
-    if (!isSignedIn && !isLoading) {
-      console.log('[RootLayout] isSignedIn changed to false — navigating to login');
-      router.replace('/auth/login');
-    }
-  }, [isSignedIn, isLoading, router]);
->>>>>>> 3048fa3dee78a4536b127e4c9457cbf4188e13b8
 
   useEffect(() => {
     if (isLoading) return;
@@ -162,23 +144,6 @@ function RootLayoutContent() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <NetworkMonitoringWrapper>
         <View style={styles.appContainer}>
-<<<<<<< HEAD
-          <Stack screenOptions={{ headerShown: false }}>
-            {/* Define all screens in the stack */}
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="auth/login" />
-            <Stack.Screen name="auth/signup" />
-
-            {/* Other routes */}
-            <Stack.Screen name="chat/detail" />
-            <Stack.Screen name="chat/info" />
-            <Stack.Screen name="chat/add" />
-            <Stack.Screen name="chat/index" />
-            <Stack.Screen name="profile/[userId]" />
-            <Stack.Screen name="profile/edit" />
-            <Stack.Screen name="profile/settings" />
-            <Stack.Screen name="profile/follow-requests" />
-=======
           <Stack screenOptions={{ headerShown: false }} initialRouteName={isSignedIn ? '(tabs)' : 'auth/login'}>
             {isSignedIn ? (
               <>
@@ -199,7 +164,6 @@ function RootLayoutContent() {
                 <Stack.Screen name="auth/signup" />
               </>
             )}
->>>>>>> 3048fa3dee78a4536b127e4c9457cbf4188e13b8
             <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
           </Stack>
           <CallOverlay />

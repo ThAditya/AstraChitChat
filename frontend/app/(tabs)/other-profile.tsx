@@ -268,7 +268,7 @@ export default function OtherProfileScreen({ userId, onMessage }: OtherProfileSc
       try {
         // Try to find an existing chat
         const existingChat = await get(`/chats/find/${userId}`);
-        chatId = existingChat.chat._id;
+        chatId = existingChat._id; // Sanitizer returns _id directly in the root
       } catch (findError) {
         // If not found, create a new one
         const currentUserId = await secureTokenManager.getUserId();
@@ -277,7 +277,8 @@ export default function OtherProfileScreen({ userId, onMessage }: OtherProfileSc
           Alert.alert('Error', 'You cannot start a chat with yourself.');
           return;
         }
-        const data = await post('/chats/create', { participants: [currentUserId, userId] });
+        // Use the dedicated /create endpoint with userId field
+        const data = await post('/chats/create', { userId: userId });
         chatId = data._id;
         chatData = data;
       }

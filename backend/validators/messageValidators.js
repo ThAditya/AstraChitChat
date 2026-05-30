@@ -2,14 +2,14 @@ const Joi = require('joi');
 
 // Create chat validator
 exports.createChatValidator = Joi.object({
-  participantId: Joi.string()
+  userId: Joi.string()
     .required()
     .regex(/^[0-9a-fA-F]{24}$/)
     .messages({
-      'string.pattern.base': 'Invalid participant ID format',
-      'any.required': 'Participant ID is required',
+      'string.pattern.base': 'Invalid user ID format',
+      'any.required': 'User ID is required',
     }),
-}).unknown(false);
+});
 
 // Create group chat validator
 exports.createGroupChatValidator = Joi.object({
@@ -23,7 +23,7 @@ exports.createGroupChatValidator = Joi.object({
       'string.max': 'Group name must not exceed 100 characters',
       'any.required': 'Group name is required',
     }),
-  participantIds: Joi.array()
+  participants: Joi.array()
     .items(
       Joi.string()
         .regex(/^[0-9a-fA-F]{24}$/)
@@ -35,27 +35,38 @@ exports.createGroupChatValidator = Joi.object({
     .required()
     .messages({
       'array.min': 'At least one participant is required',
-      'any.required': 'Participant IDs are required',
+      'any.required': 'Participants are required',
     }),
-}).unknown(false);
+});
 
 // Send message validator
 exports.sendMessageValidator = Joi.object({
   chatId: Joi.string()
-    .required()
+    .optional()
     .regex(/^[0-9a-fA-F]{24}$/)
     .messages({
       'string.pattern.base': 'Invalid chat ID format',
-      'any.required': 'Chat ID is required',
+    }),
+  receiverId: Joi.string()
+    .optional()
+    .regex(/^[0-9a-fA-F]{24}$/)
+    .messages({
+      'string.pattern.base': 'Invalid receiver ID format',
     }),
   bodyText: Joi.string()
     .max(5000)
+    .allow('', null)
     .optional()
     .messages({
       'string.max': 'Message must not exceed 5000 characters',
     }),
+  msgType: Joi.string()
+    .valid('text', 'image', 'video', 'audio', 'file', 'location', 'contact', 'sticker')
+    .default('text')
+    .optional(),
   mediaUrl: Joi.string()
     .uri()
+    .allow('', null)
     .optional()
     .messages({
       'string.uri': 'Media URL must be a valid URI',
@@ -66,22 +77,33 @@ exports.sendMessageValidator = Joi.object({
     .messages({
       'any.only': 'Media type must be one of: image, video, audio, file',
     }),
+  attachments: Joi.array()
+    .items(Joi.object({
+      public_id: Joi.string().required(),
+      secure_url: Joi.string().uri().required(),
+      resource_type: Joi.string().valid('image', 'video', 'audio', 'file').required(),
+      size: Joi.number().optional(),
+      format: Joi.string().optional(),
+    }))
+    .optional(),
   quotedMsgId: Joi.string()
     .optional()
+    .allow(null)
     .regex(/^[0-9a-fA-F]{24}$/)
     .messages({
       'string.pattern.base': 'Invalid quoted message ID format',
     }),
-}).unknown(false)
-  .custom((value, helpers) => {
-    // Ensure at least bodyText or mediaUrl is provided
-    if (!value.bodyText && !value.mediaUrl) {
-      return helpers.error('any.required', {
-        message: 'Either message text or media is required',
-      });
-    }
-    return value;
-  });
+}).custom((value, helpers) => {
+  // Ensure at least bodyText or mediaUrl or attachments is provided
+  const hasContent = (value.bodyText && value.bodyText.trim().length > 0) ||
+                    value.mediaUrl ||
+                    (value.attachments && value.attachments.length > 0);
+
+  if (!hasContent) {
+    return helpers.message('Either message text or media is required');
+  }
+  return value;
+});
 
 // Send encrypted message validator
 exports.sendEncryptedMessageValidator = Joi.object({

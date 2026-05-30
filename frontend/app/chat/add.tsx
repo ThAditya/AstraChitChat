@@ -55,7 +55,8 @@ export default function AddChatScreen() {
   const startChat = async (user: User) => {
     Keyboard.dismiss();
     try {
-      const chat = await post('/chats', { participants: [user._id] });
+      // Use the dedicated /create endpoint with userId field
+      const chat = await post('/chats/create', { userId: user._id });
       router.push({
         pathname: '/chat/detail',
         params: {

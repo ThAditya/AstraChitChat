@@ -52,7 +52,6 @@ export const AuthProvider: React.FC<{
         await secureTokenManager.clearAll();
 
         const valid = await hasValidToken();
-<<<<<<< HEAD
         const token = await secureTokenManager.getToken();
 
         console.log('[Auth] Session check result:', {
@@ -64,13 +63,6 @@ export const AuthProvider: React.FC<{
         setIsSignedIn(valid);
         if (!valid) {
           console.log('[Auth] No valid session found, clearing storage');
-=======
-        console.log('[AuthContext] Session restore completed. Token valid:', valid);
-        setIsSignedIn(valid);
-        if (!valid) {
-          // Clear any stale/invalid token data
-          console.log('[AuthContext] No valid token found — clearing stored credentials');
->>>>>>> 3048fa3dee78a4536b127e4c9457cbf4188e13b8
           await secureTokenManager.clearAll();
         }
       } catch (e) {
