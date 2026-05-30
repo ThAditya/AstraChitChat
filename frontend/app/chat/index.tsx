@@ -1,66 +1,35 @@
-import React, { useEffect, useState, useCallback, memo } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, RefreshControl, ActivityIndicator, Image, useColorScheme } from 'react-native';
+import React, { useEffect, useState, useCallback, memo, useMemo } from 'react';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, RefreshControl, ActivityIndicator, Image, useColorScheme, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { get } from '@/services/api';
 import { useSocket } from '@/contexts/SocketContext';
 import { useTheme } from '@/hooks/use-theme-color';
+import { preloadImage } from '@/services/imageCacheManager';
+import { 
+  getChatDisplayName, 
+  getChatDisplayAvatar, 
+  getLastMessagePreview,
+  getLastMessageSenderDisplay,
+  formatRelativeTime,
+  formatChatForDisplay,
+  type Chat as ChatType 
+} from '@/utils/chatDataHelpers';
 
-interface Chat {
-  _id: string;
-  convoType: 'direct' | 'group';
-  participants: {
-    user: {
-      _id: string;
-      username: string;
-      profilePicture: string;
-      name: string;
-      isOnline: boolean;
-      lastSeen: string;
-      bio: string;
-    };
-    role: string;
-    joinedAt: string;
-    lastReadMsgId: string | null;
-  }[];
-  lastMessage?: {
-    text: string;
-    createdAt: string;
-    sender: {
-      _id: string;
-      username: string;
-      profilePicture: string;
-    };
+interface Chat extends ChatType {}
+
+// Platform-specific FlatList configuration for Android optimization
+const getFlatListConfig = () => {
+  const isAndroid = Platform.OS === 'android';
+  
+  return {
+    initialNumToRender: isAndroid ? 5 : 10,           // Lower for Android to reduce memory
+    maxToRenderPerBatch: isAndroid ? 5 : 10,          // Lower for Android
+    windowSize: isAndroid ? 3 : 5,                    // Smaller render window for Android
+    updateCellsBatchingPeriod: isAndroid ? 50 : 100,  // Faster batching on Android
+    scrollEventThrottle: isAndroid ? 16 : 1,          // Throttle scroll events on Android
   };
-  unreadCount: number;
-  lastReadMsgId: string | null;
-  lastActivityTimestamp: string;
-  updatedAt: string;
-  createdAt: string;
-  otherUser?: {
-    _id: string;
-    username: string;
-    profilePicture: string;
-    name: string;
-  };
-}
-
-const formatRelativeTime = (dateString: string) => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffSec = Math.floor(diffMs / 1000);
-  const diffMin = Math.floor(diffSec / 60);
-  const diffHour = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHour / 24);
-
-  if (diffSec < 60) return 'now';
-  else if (diffMin < 60) return `${diffMin}m`;
-  else if (diffHour < 24) return `${diffHour}h`;
-  else if (diffDay < 7) return `${diffDay}d`;
-  else return date.toLocaleDateString();
 };
 
 // Extracted ChatItem component wrapped in React.memo for FlatList scroll performance
@@ -75,30 +44,108 @@ const ChatItem = memo(({
   currentUserId: string | null;
 }) => {
   const colors = useTheme();
-  const otherParticipant = item.participants.find(p => String(p.user._id) !== String(currentUserId));
-  const isFromMe = String(item.lastMessage?.sender?._id) === String(currentUserId);
 
-  const formatLastMessage = () => {
-    if (!item.lastMessage?.text) return 'No messages yet';
-    if (!isFromMe && item.lastMessage?.sender) {
-      return `${item.lastMessage.sender.username || 'User'}: ${item.lastMessage.text}`;
+  // ✅ FIX: Use helper to safely extract display data (works for both direct & group chats)
+  const displayInfo = useMemo(() => 
+    formatChatForDisplay(item, currentUserId),
+    [item, currentUserId]
+  );
+  
+  const isFromMe = useMemo(() => 
+    String(item.lastMessage?.sender?._id) === String(currentUserId),
+    [item.lastMessage?.sender?._id, currentUserId]
+  );
+
+  // Memoized: Get avatar URI with proper fallback
+  // ✅ FIX (Bug #7): Uses helper that handles both direct and group chats, with fallbacks
+  const memoizedAvatarUri = useMemo(() => {
+    const avatarUrl = getChatDisplayAvatar(item);
+    
+    if (avatarUrl) {
+      // For Android, add Cloudinary optimization if applicable
+      if (Platform.OS === 'android' && avatarUrl.includes('cloudinary')) {
+        const separator = avatarUrl.includes('?') ? '&' : '?';
+        return `${avatarUrl}${separator}q=80&w=150&c=limit`;
+      }
+      return avatarUrl;
     }
-    return isFromMe ? `You: ${item.lastMessage.text}` : item.lastMessage.text;
-  };
+    
+    // Fallback: Use display name as seed for avatar generator
+    const seed = displayInfo.displayName ? encodeURIComponent(displayInfo.displayName) : 'unknown';
+    return `https://i.pravatar.cc/150?u=${seed}&size=150`;
+  }, [item, displayInfo.displayName]);
 
-  const avatarUri = otherParticipant?.user?.profilePicture || `https://i.pravatar.cc/150?u=${otherParticipant?.user?.username || ''}`;
+  // Memoized: Format last message text with sender name if from someone else
+  const memoizedLastMessage = useMemo(() => {
+    const preview = getLastMessagePreview(item);
+    if (preview === 'No messages yet' || !item.lastMessage) return preview;
+    
+    // For group chats, show sender name; for direct chats, show "You:" if from current user
+    if (item.convoType === 'group' || (!isFromMe && item.lastMessage?.sender)) {
+      const senderName = getLastMessageSenderDisplay(item);
+      return `${senderName}: ${preview}`;
+    }
+    
+    return isFromMe ? `You: ${preview}` : preview;
+  }, [item, isFromMe]);
+
+  // Memoized: Format relative timestamp
+  const memoizedTimestamp = useMemo(() => 
+    formatRelativeTime(item.lastActivityTimestamp || item.lastMessage?.createdAt),
+    [item.lastActivityTimestamp, item.lastMessage?.createdAt]
+  );
+  
+  // FIX: Preload avatar image on Android for efficient caching
+  useEffect(() => {
+    if (memoizedAvatarUri) {
+      preloadImage(memoizedAvatarUri);
+    }
+  }, [memoizedAvatarUri]);
+  
   const formatLastMessagePreview = (text: string) => {
+    if (!text || text.length === 0) return 'No messages';
     if (text.length > 60) return text.slice(0, 60) + '…';
     return text;
   };
 
   return (
-    <TouchableOpacity style={[styles.chatItem, { backgroundColor: colors.card }]} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity 
+      style={[styles.chatItem, { backgroundColor: colors.card }]} 
+      onPress={onPress} 
+      activeOpacity={0.7}
+      delayPressIn={Platform.OS === 'android' ? 100 : 0}
+    >
       {/* Avatar */}
       <View style={styles.avatarContainer}>
         <Image 
-          source={{ uri: avatarUri }}
+          source={{ uri: memoizedAvatarUri }}
           style={styles.avatar}
+          // ✅ FIX (Bug #7): Comprehensive error handling with detailed logging
+          onError={(error: any) => {
+            console.warn('[Chat] Avatar load failed:', { 
+              uri: memoizedAvatarUri,
+              chatName: displayInfo.displayName,
+              error: error?.error || error || 'Unknown error',
+              platform: Platform.OS,
+              isGroup: displayInfo.isGroup
+            });
+            
+            // FIX: Log Android-specific certificate/connection issues
+            if (Platform.OS === 'android') {
+              console.warn('[Chat Android] Image loading issue - verify:', {
+                networkSecurityConfig: 'Check android/app/src/main/res/xml/network_security_config.xml',
+                cloudinaryUrl: memoizedAvatarUri.includes('cloudinary'),
+                httpUrl: memoizedAvatarUri.startsWith('http:'),
+                recommendation: 'Ensure HTTPS URLs and proper domain whitelisting'
+              });
+            }
+          }}
+          onLoadStart={() => {
+            // Could add loading indicator here if needed
+          }}
+          onLoad={() => {
+            // Avatar loaded successfully
+          }}
         />
         {item.unreadCount > 0 && <View style={styles.unreadDot} />}
       </View>
@@ -107,15 +154,15 @@ const ChatItem = memo(({
       <View style={styles.chatInfo}>
         <View style={styles.chatHeader}>
           <ThemedText type="subtitle" style={styles.username} numberOfLines={1} ellipsizeMode="tail">
-            {otherParticipant?.user?.username || 'Unknown User'}
+            {displayInfo.displayName || 'Unknown Chat'}
           </ThemedText>
           <Text style={[styles.timestamp, { color: colors.textTertiary }]}>
-            {formatRelativeTime(item.updatedAt)}
+            {memoizedTimestamp}
           </Text>
         </View>
         <View style={styles.messageRow}>
           <Text style={[styles.lastMessage, { color: colors.textSecondary }, isFromMe && { color: colors.tint }, item.unreadCount > 0 && styles.unreadMessage]} numberOfLines={1}>
-            {formatLastMessage()}
+            {formatLastMessagePreview(memoizedLastMessage)}
           </Text>
           <View style={styles.rightSection}>
             {item.unreadCount > 0 && (
@@ -128,6 +175,14 @@ const ChatItem = memo(({
         </View>
       </View>
     </TouchableOpacity>
+  );
+}, (prevProps, nextProps) => {
+  // Custom memo comparison for Android - only re-render if critical data changes
+  return (
+    prevProps.item._id === nextProps.item._id &&
+    prevProps.item.unreadCount === nextProps.item.unreadCount &&
+    prevProps.item.lastMessage?.createdAt === nextProps.item.lastMessage?.createdAt &&
+    prevProps.currentUserId === nextProps.currentUserId
   );
 });
 
@@ -143,6 +198,9 @@ export default function ChatListScreen() {
   const router = useRouter();
   // Cast conversations to Chat[] for type safety in this component
   const chats = conversations as Chat[];
+
+  // Get platform-specific FlatList configuration
+  const flatListConfig = useMemo(() => getFlatListConfig(), []);
 
   // The socket context handles real-time updates globally.
   // We only fetch chats once on initial mount if the list is empty.
@@ -215,15 +273,34 @@ export default function ChatListScreen() {
     fetchChats(false);
   }, []);
 
-  // Handle navigation centrally
+  // Handle navigation centrally - works for both direct and group chats
   const handlePressChat = useCallback((item: Chat) => {
-    const otherParticipant = item.participants.find(p => String(p.user._id) !== String(currentUserId));
+    let otherUserId = '';
+    let otherUsername = '';
+
+    // For direct chats, use otherUser if available (pre-extracted by backend sanitizer)
+    if (item.convoType === 'direct') {
+      if (item.otherUser?._id) {
+        otherUserId = item.otherUser._id;
+        otherUsername = item.otherUser.username || 'User';
+      } else {
+        // Fallback: extract from participants
+        const otherParticipant = item.participants?.find(p => String(p.user._id) !== String(currentUserId));
+        otherUserId = otherParticipant?.user?._id || '';
+        otherUsername = otherParticipant?.user?.username || 'User';
+      }
+    } else {
+      // For group chats, use chatId and group name
+      otherUserId = item._id;
+      otherUsername = item.groupName || 'Group Chat';
+    }
+
     router.push({
       pathname: '/chat/detail',
       params: {
         chatId: item._id,
-        otherUserId: otherParticipant?.user?._id || '',
-        otherUsername: otherParticipant?.user?.username || ''
+        otherUserId: otherUserId,
+        otherUsername: otherUsername
       }
     });
   }, [currentUserId, router]);
@@ -238,6 +315,30 @@ export default function ChatListScreen() {
       currentUserId={currentUserId} 
     />
   ), [currentUserId, handlePressChatItem]);
+
+  // Debug: Log data shape for Android crash investigation
+  useEffect(() => {
+    if (chats.length > 0) {
+      console.log('🔍 [CHAT_LIST] Data shape check:');
+      console.log('📦 Total chats:', chats.length);
+      console.log('📄 First chat:', JSON.stringify(chats[0], null, 2));
+      console.log('🖼️ First chat avatar:', chats[0]?.participants?.[0]?.user?.profilePicture);
+      console.log('💬 First chat lastMessage:', chats[0]?.lastMessage);
+      console.log('👤 Current user ID:', currentUserId);
+      
+      // Check for bad data patterns
+      const badChats = chats.filter((chat, idx) => {
+        const hasNullAvatar = !chat.participants?.[0]?.user?.profilePicture;
+        const hasNullMessage = chat.lastMessage === null || chat.lastMessage === undefined;
+        const hasMissingUser = !chat.participants?.[0]?.user?.username;
+        if (hasNullAvatar || hasNullMessage || hasMissingUser) {
+          console.warn(`⚠️ Chat ${idx} has bad data:`, { hasNullAvatar, hasNullMessage, hasMissingUser });
+        }
+        return hasNullAvatar || hasNullMessage || hasMissingUser;
+      });
+      if (badChats.length > 0) console.error('🔴 Found bad chats:', badChats.length);
+    }
+  }, [chats, currentUserId]);
 
   // Render empty state
   const renderEmptyComponent = () => {
@@ -263,7 +364,7 @@ export default function ChatListScreen() {
     <ThemedView style={styles.container}>
       <ThemedText type="title" style={styles.title}>Chats</ThemedText>
       <FlatList
-        data={chats}
+        data={Array.isArray(chats) ? chats : []}
         renderItem={renderChat}
         keyExtractor={(item) => String(item._id)}
         showsVerticalScrollIndicator={false}
@@ -273,13 +374,11 @@ export default function ChatListScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={colors.tint} // iOS spinner color
-            colors={[colors.tint]} // Android spinner color
+            tintColor={colors.tint}
+            colors={[colors.tint]}
           />
         }
-        initialNumToRender={10}
-        maxToRenderPerBatch={10}
-        windowSize={5}
+        {...flatListConfig}
         removeClippedSubviews={true}
       />
     </ThemedView>

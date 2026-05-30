@@ -52,6 +52,7 @@ export const AuthProvider: React.FC<{
         await secureTokenManager.clearAll();
 
         const valid = await hasValidToken();
+<<<<<<< HEAD
         const token = await secureTokenManager.getToken();
 
         console.log('[Auth] Session check result:', {
@@ -63,10 +64,17 @@ export const AuthProvider: React.FC<{
         setIsSignedIn(valid);
         if (!valid) {
           console.log('[Auth] No valid session found, clearing storage');
+=======
+        console.log('[AuthContext] Session restore completed. Token valid:', valid);
+        setIsSignedIn(valid);
+        if (!valid) {
+          // Clear any stale/invalid token data
+          console.log('[AuthContext] No valid token found — clearing stored credentials');
+>>>>>>> 3048fa3dee78a4536b127e4c9457cbf4188e13b8
           await secureTokenManager.clearAll();
         }
       } catch (e) {
-        console.error('[Auth] Session restore failed:', e);
+        console.error('[AuthContext] Session restore failed:', e);
         setIsSignedIn(false);
       } finally {
         setIsLoading(false);
@@ -93,6 +101,7 @@ export const AuthProvider: React.FC<{
   }, []);
 
   const signOut = useCallback(async () => {
+    console.log('[AuthContext] signOut called — clearing credentials and redirecting to login');
     // 1. Disconnect socket first (before clearing credentials)
     if (socketDisconnectRef.current) {
       socketDisconnectRef.current();
@@ -103,6 +112,7 @@ export const AuthProvider: React.FC<{
     setIsSignedIn(false);
     // 4. Navigate (belt-and-suspenders in case router needs a push)
     setTimeout(() => {
+      console.log('[AuthContext] Navigating to login screen');
       routerRef.current.replace('/auth/login');
     }, 0);
   }, []);

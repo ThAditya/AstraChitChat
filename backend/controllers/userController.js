@@ -1,6 +1,6 @@
 const User = require('../models/User');
 const Post = require('../models/Post');
-const Follow = require('../models/Follow');
+const Follower = require('../models/Follower');
 const Like = require('../models/Like');
 const Message = require('../models/Message');
 const Chat = require('../models/Chat');
@@ -143,6 +143,10 @@ const toggleMuteUser = async (req, res) => {
     const targetUser = await User.findById(targetUserId);
     if (!targetUser) return res.status(404).json({ message: 'User not found' });
 
+    if (!currentUser.mutedUsers) {
+      currentUser.mutedUsers = [];
+    }
+
     const isMuted = currentUser.mutedUsers.some(
       id => id.toString() === targetUserId
     );
@@ -214,7 +218,7 @@ const exportData = async (req, res) => {
       .lean();
 
     const posts  = await Post.find({ user: userId }).lean();
-    const follows = await Follow.find({
+    const follows = await Follower.find({
       $or: [{ follower: userId }, { following: userId }],
     }).lean();
     const likes = await Like.find({ user: userId }).lean();
@@ -278,7 +282,7 @@ const deleteAccount = async (req, res) => {
 
     // Cascade delete DB records
     await Post.deleteMany({ user: userId });
-    await Follow.deleteMany({ $or: [{ follower: userId }, { following: userId }] });
+    await Follower.deleteMany({ $or: [{ follower: userId }, { following: userId }] });
     await Like.deleteMany({ user: userId });
     await Message.deleteMany({ sender: userId });
 
