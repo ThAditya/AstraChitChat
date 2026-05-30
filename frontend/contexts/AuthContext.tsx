@@ -46,10 +46,23 @@ export const AuthProvider: React.FC<{
   useEffect(() => {
     const restoreSession = async () => {
       try {
+        console.log('[Auth] Restoring session...');
+
+        // FORCE LOGOUT ONCE TO TEST LOGIN FLOW
+        await secureTokenManager.clearAll();
+
         const valid = await hasValidToken();
+        const token = await secureTokenManager.getToken();
+
+        console.log('[Auth] Session check result:', {
+          hasToken: !!token,
+          isValid: valid,
+          tokenPreview: token ? `${token.substring(0, 10)}...` : 'null'
+        });
+
         setIsSignedIn(valid);
         if (!valid) {
-          // Clear any stale/invalid token data
+          console.log('[Auth] No valid session found, clearing storage');
           await secureTokenManager.clearAll();
         }
       } catch (e) {

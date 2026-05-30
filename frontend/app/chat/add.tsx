@@ -1,12 +1,13 @@
 import TopHeaderComponent from '@/components/TopHeaderComponent';
-import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, TextInput, Alert, Image } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, TextInput, Alert, Image, Platform, ActivityIndicator, Keyboard } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { get, post } from '@/services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/hooks/use-theme-color';
+import { Ionicons } from '@expo/vector-icons';
 
 interface User {
   _id: string;
@@ -21,35 +22,40 @@ export default function AddChatScreen() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const colors = useTheme();
+  const debounceTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
+
     if (searchQuery.trim().length > 0) {
-      searchUsers();
+      debounceTimeout.current = setTimeout(() => {
+        searchUsers();
+      }, 500);
     } else {
       setSearchResults([]);
     }
+
+    return () => {
+      if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
+    };
   }, [searchQuery]);
 
   const searchUsers = async () => {
-    if (!searchQuery.trim()) return;
-
     try {
       setLoading(true);
       const data = await get(`/users/search?q=${encodeURIComponent(searchQuery)}`);
       setSearchResults(data.users || []);
     } catch (error: any) {
       console.error('Search error:', error);
-      Alert.alert('Error', error.response?.data?.message || 'Failed to search users');
     } finally {
       setLoading(false);
     }
   };
 
   const startChat = async (user: User) => {
+    Keyboard.dismiss();
     try {
-      const currentUserId = await AsyncStorage.getItem('userId');
-      if (!currentUserId) throw new Error('User not logged in');
-      const chat = await post('/chats', { userId: user._id });
+      const chat = await post('/chats', { participants: [user._id] });
       router.push({
         pathname: '/chat/detail',
         params: {
@@ -59,7 +65,7 @@ export default function AddChatScreen() {
         }
       });
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to start chat');
+      Alert.alert('Error', error.response?.data?.message || 'Failed to start chat');
     }
   };
 
@@ -81,39 +87,42 @@ export default function AddChatScreen() {
       {/* Top Header now handles back navigation */}
       <TopHeaderComponent />
 
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={[styles.searchInput, { backgroundColor: colors.input, color: colors.text, borderColor: colors.border }]}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholder="Search users by username or name..."
-          placeholderTextColor={colors.placeholder}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
+      <View style={[styles.searchContainer, { backgroundColor: colors.background }]}>
+        <View style={[styles.searchWrapper, { backgroundColor: colors.input, borderColor: colors.border }]}>
+          <Ionicons name="search" size={20} color={colors.placeholder} style={styles.searchIcon} />
+          <TextInput
+            style={[styles.searchInput, { color: colors.text }]}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search users by username..."
+            placeholderTextColor={colors.placeholder}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+            underlineColorAndroid="transparent"
+          />
+          {loading && <ActivityIndicator size="small" color={colors.tint} style={styles.loader} />}
+        </View>
       </View>
 
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Searching...</Text>
-        </View>
-      ) : searchResults.length > 0 ? (
+      {searchResults.length > 0 ? (
         <FlatList
           data={searchResults}
           renderItem={renderUser}
           keyExtractor={(item) => item._id}
           style={styles.resultsList}
           contentContainerStyle={styles.resultsContainer}
+          keyboardShouldPersistTaps="handled"
         />
-      ) : searchQuery.trim().length > 0 ? (
+      ) : searchQuery.trim().length > 0 && !loading ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No users found</Text>
+          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No users found</Text>
         </View>
-      ) : (
+      ) : !loading ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>Search for users to start a chat</Text>
+          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Search for users to start a chat</Text>
         </View>
-      )}
+      ) : null}
     </ThemedView>
   );
 }
@@ -122,26 +131,29 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-  },
-  backButton: {
-    fontSize: 24,
-    marginRight: 16,
-    color: '#388e3c', // Theme: light.success (static style, using fallback)
-  },
   searchContainer: {
     padding: 16,
+    zIndex: 1,
+  },
+  searchWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 25,
+    paddingHorizontal: 15,
+    height: 50,
+  },
+  searchIcon: {
+    marginRight: 10,
   },
   searchInput: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    flex: 1,
     fontSize: 16,
+    height: '100%',
+    paddingVertical: 0,
+  },
+  loader: {
+    marginLeft: 10,
   },
   loadingContainer: {
     flex: 1,

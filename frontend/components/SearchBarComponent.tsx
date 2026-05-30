@@ -1,5 +1,6 @@
 import * as api from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -11,6 +12,8 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Platform,
+  Keyboard,
 } from 'react-native';
 import { useTheme } from '@/hooks/use-theme-color';
 
@@ -23,75 +26,98 @@ interface SearchResult {
 }
 
 const styles = StyleSheet.create({
-  container: { position: 'relative', zIndex: 1 },
+  container: {
+    position: 'relative',
+    zIndex: 100,
+    elevation: Platform.OS === 'android' ? 5 : 0,
+  },
   searchContainer: {
     flexDirection: 'row',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    // backgroundColor will be applied dynamically
     alignItems: 'center',
   },
-  searchIcon: { marginRight: 10 },
+  searchWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 22,
+    height: 44,
+    paddingHorizontal: 12,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
   searchInput: {
     flex: 1,
-    height: 40,
-    // backgroundColor and color will be applied dynamically
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingLeft: 40,
+    height: '100%',
+    fontSize: 16,
+    paddingVertical: 0,
+    textAlignVertical: 'center',
   },
   suggestionsContainer: {
     position: 'absolute',
-    top: 60,
+    top: 64,
     left: 16,
     right: 16,
-    // backgroundColor will be applied dynamically
-    borderRadius: 10,
-    maxHeight: 300,
-    zIndex: 10,
+    borderRadius: 12,
+    maxHeight: 400,
+    zIndex: 1000,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
+    overflow: Platform.OS === 'android' ? 'hidden' : 'visible',
   },
   suggestionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderBottomWidth: 1,
-    // borderBottomColor will be applied dynamically
+    padding: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   suggestionText: { fontSize: 16, marginLeft: 10 },
   profilePic: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    // backgroundColor will be applied dynamically
   },
   loadingContainer: {
     position: 'absolute',
-    top: 60,
+    top: 64,
     left: 16,
     right: 16,
-    // backgroundColor will be applied dynamically
-    borderRadius: 10,
-    padding: 12,
+    borderRadius: 12,
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    zIndex: 10,
+    zIndex: 100,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
   },
   loadingText: { fontSize: 16, marginLeft: 10 },
   errorContainer: {
     position: 'absolute',
-    top: 60,
+    top: 64,
     left: 16,
     right: 16,
-    // backgroundColor will be applied dynamically
-    borderRadius: 10,
-    padding: 12,
-    zIndex: 10,
+    borderRadius: 12,
+    padding: 16,
+    zIndex: 100,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
   },
   errorText: { fontSize: 16, textAlign: 'center' },
 });
 
 export default function SearchBarComponent() {
-  const router = require('expo-router').useRouter();
+  const router = useRouter();
   const colors = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -113,10 +139,7 @@ export default function SearchBarComponent() {
     setError(null);
 
     try {
-      console.log('Making search request to /search for:', query);
       const data = await api.get(`/search?q=${encodeURIComponent(query)}`);
-      console.log('Search response data:', data);
-      console.log('Search response data:', data);
 
       // Handle both formats: { users: [...] } or direct array
       const usersArray = Array.isArray(data) ? data : data.users || [];
@@ -152,6 +175,7 @@ export default function SearchBarComponent() {
   }, [searchQuery]);
 
   const handleResultPress = (item: SearchResult) => {
+    Keyboard.dismiss();
     if (item.type === 'query') {
       handleSearch(item.username || '');
       return;
@@ -161,7 +185,7 @@ export default function SearchBarComponent() {
       // Navigate to home tab with profile modal
       router.push(`/profile/${item._id}`);
     } else {
-      router.push({ pathname: '/chat', params: { chatId: item._id } });
+      router.push({ pathname: '/chat/detail', params: { chatId: item._id } });
     }
 
     setSearchQuery('');
@@ -185,6 +209,7 @@ export default function SearchBarComponent() {
     <TouchableOpacity 
       style={[styles.suggestionItem, { borderBottomColor: colors.border }]} 
       onPress={() => handleResultPress(item)}
+      activeOpacity={0.7}
     >
       {item.type === 'query' ? (
         <Ionicons name="search-outline" size={20} color={colors.textMuted} />
@@ -193,7 +218,7 @@ export default function SearchBarComponent() {
       ) : (
         <Ionicons name="person-circle-outline" size={24} color={colors.tint} />
       )}
-      <Text style={[styles.suggestionText, { color: colors.text }]}>
+      <Text style={[styles.suggestionText, { color: colors.text }]} numberOfLines={1}>
         {item.type === 'query' ? `Search for "${item.username}"` : item.username}
       </Text>
     </TouchableOpacity>
@@ -202,16 +227,21 @@ export default function SearchBarComponent() {
   return (
     <View style={styles.container}>
       <View style={[styles.searchContainer, { backgroundColor: colors.background }]}>
-        <Ionicons name="search-outline" size={20} color={colors.textMuted} style={styles.searchIcon} />
-        <TextInput
-          style={[styles.searchInput, { backgroundColor: colors.backgroundSecondary, color: colors.text }]}
-          placeholder="Search users and chats..."
-          placeholderTextColor={colors.textMuted}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          onSubmitEditing={() => handleSearch(searchQuery)}
-          returnKeyType="search"
-        />
+        <View style={[styles.searchWrapper, { backgroundColor: colors.backgroundSecondary }]}>
+          <Ionicons name="search-outline" size={20} color={colors.textMuted} style={styles.searchIcon} />
+          <TextInput
+            style={[styles.searchInput, { color: colors.text }]}
+            placeholder="Search users and chats..."
+            placeholderTextColor={colors.textMuted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onSubmitEditing={() => handleSearch(searchQuery)}
+            returnKeyType="search"
+            autoCorrect={false}
+            autoCapitalize="none"
+            underlineColorAndroid="transparent"
+          />
+        </View>
       </View>
 
       {loading && (

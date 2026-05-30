@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,10 +17,7 @@ import NetworkMonitoringWrapper from '@/components/NetworkMonitoringWrapper';
 import OfflineStatusIndicator from '@/components/OfflineStatusIndicator';
 import { useTheme } from '@/hooks/use-theme-color';
 
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
-
+// Remove unstable_settings that was forcing (tabs) anchor
 /**
  * PRODUCTION ERROR BOUNDARY
  * Catches all unhandled errors and prevents app crashes
@@ -108,9 +105,34 @@ function RootLayoutContent() {
   const colorScheme = useColorScheme();
   const colors = useTheme();
   const { isLoading, isSignedIn } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
 
-  // Show splash while auth check runs (happens inside AuthContext on mount)
-  if (isLoading) {
+  useEffect(() => {
+    if (isLoading) return;
+
+    const inAuthGroup = segments[0] === 'auth';
+
+    // Log the current routing state for debugging
+    console.log('[AuthGuard] State:', {
+      isSignedIn,
+      segments,
+      inAuthGroup
+    });
+
+    if (!isSignedIn && !inAuthGroup) {
+      // Not signed in and not in auth screens -> Redirect to login
+      console.log('[AuthGuard] 🚫 Not signed in. Redirecting to login...');
+      router.replace('/auth/login');
+    } else if (isSignedIn && inAuthGroup) {
+      // Signed in but still in auth screens -> Redirect to home
+      console.log('[AuthGuard] ✅ Signed in. Redirecting to home...');
+      router.replace('/(tabs)');
+    }
+  }, [isSignedIn, segments, isLoading]);
+
+  // Show splash while auth check runs OR while waiting for redirect to login
+  if (isLoading || (!isSignedIn && segments[0] !== 'auth')) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.tint} />
@@ -123,25 +145,20 @@ function RootLayoutContent() {
       <NetworkMonitoringWrapper>
         <View style={styles.appContainer}>
           <Stack screenOptions={{ headerShown: false }}>
-            {isSignedIn ? (
-              <>
-                <Stack.Screen name="(tabs)" />
-                <Stack.Screen name="chat/detail" />
-                <Stack.Screen name="chat/info" />
-                <Stack.Screen name="chat/add" />
-                <Stack.Screen name="chat/index" />
-                <Stack.Screen name="profile/[userId]" />
-                <Stack.Screen name="profile/edit" />
-                <Stack.Screen name="profile/settings" />
-                <Stack.Screen name="profile/admin" />
-                <Stack.Screen name="profile/follow-requests" />
-              </>
-            ) : (
-              <>
-                <Stack.Screen name="auth/login" />
-                <Stack.Screen name="auth/signup" />
-              </>
-            )}
+            {/* Define all screens in the stack */}
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="auth/login" />
+            <Stack.Screen name="auth/signup" />
+
+            {/* Other routes */}
+            <Stack.Screen name="chat/detail" />
+            <Stack.Screen name="chat/info" />
+            <Stack.Screen name="chat/add" />
+            <Stack.Screen name="chat/index" />
+            <Stack.Screen name="profile/[userId]" />
+            <Stack.Screen name="profile/edit" />
+            <Stack.Screen name="profile/settings" />
+            <Stack.Screen name="profile/follow-requests" />
             <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
           </Stack>
           <CallOverlay />

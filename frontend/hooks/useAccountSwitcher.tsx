@@ -24,7 +24,7 @@ export function useAccountSwitcher() {
   const router = useRouter();
   const { connect, disconnect, setConversations } = useSocket();
   const { endCall } = useCall();
-  const { handleAuthError } = useAuth();
+  const { handleAuthError, signOut } = useAuth();
 
   // Fetch current username on mount
   useEffect(() => {
@@ -158,16 +158,13 @@ export function useAccountSwitcher() {
               try {
                 // 1. Reset state FIRST (before navigation)
                 await resetAccountState();
-                
-                // 2. Clear tokens to force re-login
-                await secureTokenManager.clearAll();
-                console.log('[AccountSwitcher] Tokens cleared, navigating to login');
-                
-                // 3. Close modal
+
+                // 2. Close modal
                 setIsAccountModalVisible(false);
                 
-                // 4. Navigate to login (with account info pre-filled if backend supports it)
-                router.replace('/auth/login' as any);
+                // 3. Use signOut to flip the auth gate and navigate properly
+                // This ensures RootLayoutContent re-renders with auth routes
+                await signOut();
               } catch (error: any) {
                 console.error('[AccountSwitcher] Error during switch:', error);
                 Alert.alert('Error', 'Failed to switch accounts. Please try again.');
@@ -184,9 +181,10 @@ export function useAccountSwitcher() {
     }
   };
 
-  const addAccount = () => {
+  const addAccount = async () => {
     setIsAccountModalVisible(false);
-    router.push('/auth/login');
+    // Use signOut to ensure isSignedIn(false) so that RootLayout adds auth routes to the stack
+    await signOut();
   };
 
   const closeAccountModal = () => {

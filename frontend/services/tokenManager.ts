@@ -37,21 +37,33 @@ export const validateToken = async (token?: string): Promise<boolean> => {
   try {
     const tokenToCheck = token ?? (await secureTokenManager.getToken());
     if (!tokenToCheck || typeof tokenToCheck !== 'string' || !tokenToCheck.trim()) {
+      console.log('[TokenManager] Validation failed: No token string');
       return false;
     }
 
     const payload = decodeJwtPayload(tokenToCheck);
-    if (!payload) return false;
+    if (!payload) {
+      console.log('[TokenManager] Validation failed: Could not decode payload');
+      return false;
+    }
 
     // Check expiration
     const now = Math.floor(Date.now() / 1000);
-    if (payload.exp && payload.exp < now) return false;
+    if (payload.exp && payload.exp < now) {
+      console.log('[TokenManager] Validation failed: Token expired', { exp: payload.exp, now });
+      return false;
+    }
 
     // Backend signs with { id } — also accept _id/userId for forward compat
-    if (!payload.id && !payload._id && !payload.userId) return false;
+    const hasId = !!(payload.id || payload._id || payload.userId);
+    if (!hasId) {
+      console.log('[TokenManager] Validation failed: No user ID in payload');
+      return false;
+    }
 
     return true;
-  } catch {
+  } catch (error) {
+    console.error('[TokenManager] Validation error:', error);
     return false;
   }
 };
