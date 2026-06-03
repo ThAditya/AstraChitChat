@@ -89,6 +89,30 @@ const userSchema = new mongoose.Schema(
         default: ''
     },
 
+    birthday: {
+        type: Date,
+        default: null
+    },
+
+    gender: {
+        type: String,
+        enum: ['Male', 'Female', 'Other', 'Prefer not to say'],
+        default: 'Prefer not to say'
+    },
+
+    interests: [
+        {
+            type: String,
+            trim: true
+        }
+    ],
+
+    socialLinks: {
+        type: Map,
+        of: String,
+        default: {}
+    },
+
     isOnline: {
         type: Boolean,
         default: false,

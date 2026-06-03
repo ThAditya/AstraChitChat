@@ -90,6 +90,7 @@ const updateUserProfile = async (req, res) => {
         profilePicture, profilePublicId,   // Cloudinary URL + public_id
         coverPhoto,     coverPublicId,
         location, website, pronouns, isPrivate,
+        birthday, gender, interests, socialLinks
     } = req.body;
 
     try {
@@ -158,6 +159,10 @@ const updateUserProfile = async (req, res) => {
         if (website        !== undefined) user.website        = website;
         if (pronouns       !== undefined) user.pronouns       = pronouns;
         if (isPrivate      !== undefined) user.isPrivate      = isPrivate;
+        if (birthday       !== undefined) user.birthday       = birthday;
+        if (gender         !== undefined) user.gender         = gender;
+        if (interests      !== undefined) user.interests      = interests;
+        if (socialLinks    !== undefined) user.socialLinks    = socialLinks;
 
         const updated = await user.save();
         const userStats = await getUserStats(req.user._id);
@@ -240,6 +245,10 @@ function serializeProfile(user, userStats) {
         location:         user.location || '',
         website:          user.website || '',
         pronouns:         user.pronouns || '',
+        birthday:         user.birthday || null,
+        gender:           user.gender || 'Prefer not to say',
+        interests:        user.interests || [],
+        socialLinks:      user.socialLinks || {},
         stats: {
             posts:     userStats?.postsCount     || user.postsCount     || 0,
             followers: userStats?.followersCount || user.followersCount || 0,

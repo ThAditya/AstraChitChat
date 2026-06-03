@@ -162,8 +162,9 @@ const socketOrigins = process.env.SOCKET_ORIGINS
         'http://localhost:8081',
         'http://localhost:8082',
         'exp://localhost:8081',
-        'http://10.170.22.72:8081',      // ✅ Android device development
-        'exp://10.170.22.72:8081',       // ✅ Expo development
+        'http://192.168.1.7:8081',        // ✅ Updated current IP
+        'http://192.168.1.7:5000',        // ✅ Add server port
+        'exp://192.168.1.7:8081',
     ];
 
 const io = new Server(server, {
@@ -826,12 +827,19 @@ app.use((req, res, next) => {
 // ✅ FIX: Error handler is registered BEFORE server.listen(), not after
 // ✅ FIX: Removed duplicate error handler and broken brace structure
 app.use((err, req, res, next) => {
+    const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
+
     console.error('🔥 ERROR:', {
         url: req.originalUrl,
         method: req.method,
         message: err.message,
+        status: statusCode
     });
-    res.status(500).json({ message: 'Server Error' });
+
+    res.status(statusCode).json({
+        message: err.message,
+        stack: process.env.NODE_ENV === 'production' ? null : err.stack,
+    });
 });
 
 // ── Start Server ──────────────────────────────────────────────────────────────

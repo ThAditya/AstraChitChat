@@ -35,20 +35,21 @@ const {
   sendMessageValidator,
   sendEncryptedMessageValidator,
   editMessageValidator,
-  deleteMessageValidator,
-  unsendMessageValidator,
   markMessageAsReadValidator,
   markAllMessagesAsReadValidator,
   addReactionValidator,
-  removeReactionValidator,
   muteChatValidator,
   pinChatValidator,
-  clearChatValidator,
   getChatMessagesValidator,
   searchChatsValidator,
   addGroupMemberValidator,
   removeGroupMemberValidator,
   leaveGroupValidator,
+  paginationValidator,
+  chatIdParamValidator,
+  messageIdParamValidator,
+  userIdParamValidator,
+  messageIdAndEmojiParamValidator,
 } = require('../validators/messageValidators');
 const {
   chatLimiter,
@@ -66,10 +67,10 @@ const router = express.Router();
 router.get('/search', protect, searchLimiter, validateRequest({ querySchema: searchChatsValidator }), searchChats);
 
 // Find existing chat with a user
-router.get('/find/:userId', protect, validateRequest({}), findChat);
+router.get('/find/:userId', protect, chatLimiter, validateRequest({ paramsSchema: userIdParamValidator }), findChat);
 
 // Get user online status
-router.get('/user-status/:userId', protect, validateRequest({}), getUserStatus);
+router.get('/user-status/:userId', protect, chatLimiter, validateRequest({ paramsSchema: userIdParamValidator }), getUserStatus);
 
 // FIX: Add createChatLimiter to prevent spam chat creation
 router.post('/create', protect, createChatLimiter, validateRequest({ bodySchema: createChatValidator }), createChat);
@@ -82,57 +83,59 @@ router.post('/read-all', protect, chatLimiter, validateRequest({ bodySchema: mar
 
 // ── Message-specific routes (before /:chatId wildcard) ───────
 // FIX: Add chatLimiter to mark read operations
-router.post('/messages/:messageId/read', protect, chatLimiter, validateRequest({ bodySchema: markMessageAsReadValidator }), markMessageAsRead);
+router.post('/messages/:messageId/read', protect, chatLimiter, validateRequest({ paramsSchema: messageIdParamValidator, bodySchema: markMessageAsReadValidator }), markMessageAsRead);
 
 // FIX: Add editMessageLimiter to prevent edit spam
-router.put('/messages/:messageId', protect, editMessageLimiter, validateRequest({ bodySchema: editMessageValidator }), editMessage);
+router.put('/messages/:messageId', protect, editMessageLimiter, validateRequest({ paramsSchema: messageIdParamValidator, bodySchema: editMessageValidator }), editMessage);
 
 // FIX: Add deleteMessageLimiter to prevent delete spam
-router.delete('/messages/:messageId/unsend', protect, deleteMessageLimiter, validateRequest({ bodySchema: unsendMessageValidator }), unsendMessage);
+// NOTE: DELETE routes should not have body schemas for better compatibility
+router.delete('/messages/:messageId/unsend', protect, deleteMessageLimiter, validateRequest({ paramsSchema: messageIdParamValidator }), unsendMessage);
 
 // FIX: Add deleteMessageLimiter to prevent delete spam
-router.delete('/messages/:messageId', protect, deleteMessageLimiter, validateRequest({ bodySchema: deleteMessageValidator }), deleteMessage);
+router.delete('/messages/:messageId', protect, deleteMessageLimiter, validateRequest({ paramsSchema: messageIdParamValidator }), deleteMessage);
 
 // FIX: Add chatLimiter to receipt queries
-router.get('/messages/:messageId/receipts', protect, chatLimiter, validateRequest({}), getMessageReceipts);
+router.get('/messages/:messageId/receipts', protect, chatLimiter, validateRequest({ paramsSchema: messageIdParamValidator }), getMessageReceipts);
 
 // FIX: Add chatLimiter to reaction operations
-router.post('/messages/:messageId/reactions', protect, chatLimiter, validateRequest({ bodySchema: addReactionValidator }), addReaction);
+router.post('/messages/:messageId/reactions', protect, chatLimiter, validateRequest({ paramsSchema: messageIdParamValidator, bodySchema: addReactionValidator }), addReaction);
 
-router.delete('/messages/:messageId/reactions/:emoji', protect, chatLimiter, validateRequest({ bodySchema: removeReactionValidator }), removeReaction);
+router.delete('/messages/:messageId/reactions/:emoji', protect, chatLimiter, validateRequest({ paramsSchema: messageIdAndEmojiParamValidator }), removeReaction);
 
-router.get('/messages/:messageId/reactions', protect, chatLimiter, validateRequest({}), getMessageReactions);
+router.get('/messages/:messageId/reactions', protect, chatLimiter, validateRequest({ paramsSchema: messageIdParamValidator }), getMessageReactions);
 
 // ── Wildcard /:chatId routes last ────────────────────────────
-router.get('/', protect, validateRequest({}), getChats);
+// FIX: Add paginationValidator to the main chat list route
+router.get('/', protect, chatLimiter, validateRequest({ querySchema: paginationValidator }), getChats);
 
 // ✅ FIX: sendMessage supports both routes with messageLimiter:
 // - POST / sends message by receiverId (finds/creates chat automatically)
 // - POST /:chatId/messages sends message to existing chat using chatId
 router.post('/', protect, messageLimiter, validateRequest({ bodySchema: sendMessageValidator }), sendMessage);
 
-router.get('/:chatId/messages', protect, validateRequest({ paramsSchema: getChatMessagesValidator }), getChatMessages);
+router.get('/:chatId/messages', protect, chatLimiter, validateRequest({ paramsSchema: chatIdParamValidator, querySchema: getChatMessagesValidator }), getChatMessages);
 
-router.post('/:chatId/messages', protect, messageLimiter, validateRequest({ bodySchema: sendMessageValidator }), sendMessage);
+router.post('/:chatId/messages', protect, messageLimiter, validateRequest({ paramsSchema: chatIdParamValidator, bodySchema: sendMessageValidator }), sendMessage);
 
-router.get('/:chatId/encrypted-messages', protect, validateRequest({}), getEncryptedChatMessages);
+router.get('/:chatId/encrypted-messages', protect, chatLimiter, validateRequest({ paramsSchema: chatIdParamValidator, querySchema: getChatMessagesValidator }), getEncryptedChatMessages);
 
-router.post('/:chatId/encrypted-messages', protect, messageLimiter, validateRequest({ bodySchema: sendEncryptedMessageValidator }), sendEncryptedMessage);
+router.post('/:chatId/encrypted-messages', protect, messageLimiter, validateRequest({ paramsSchema: chatIdParamValidator, bodySchema: sendEncryptedMessageValidator }), sendEncryptedMessage);
 
-router.get('/:chatId/info', protect, validateRequest({}), getChatInfo);
+router.get('/:chatId/info', protect, chatLimiter, validateRequest({ paramsSchema: chatIdParamValidator }), getChatInfo);
 
-router.get('/:chatId/media', protect, validateRequest({}), getChatMedia);
+router.get('/:chatId/media', protect, chatLimiter, validateRequest({ paramsSchema: chatIdParamValidator, querySchema: paginationValidator }), getChatMedia);
 
-router.post('/:chatId/mute', protect, chatLimiter, validateRequest({ bodySchema: muteChatValidator }), muteChat);
+router.post('/:chatId/mute', protect, chatLimiter, validateRequest({ paramsSchema: chatIdParamValidator, bodySchema: muteChatValidator }), muteChat);
 
-router.post('/:chatId/pin', protect, chatLimiter, validateRequest({ bodySchema: pinChatValidator }), pinChat);
+router.post('/:chatId/pin', protect, chatLimiter, validateRequest({ paramsSchema: chatIdParamValidator, bodySchema: pinChatValidator }), pinChat);
 
-router.post('/:chatId/clear', protect, chatLimiter, validateRequest({ bodySchema: clearChatValidator }), clearChat);
+router.post('/:chatId/clear', protect, chatLimiter, validateRequest({ paramsSchema: chatIdParamValidator }), clearChat);
 
-router.post('/:chatId/leave', protect, chatLimiter, validateRequest({ bodySchema: leaveGroupValidator }), leaveGroup);
+router.post('/:chatId/leave', protect, chatLimiter, validateRequest({ paramsSchema: chatIdParamValidator, bodySchema: leaveGroupValidator }), leaveGroup);
 
-router.post('/:chatId/add-member', protect, chatLimiter, validateRequest({ bodySchema: addGroupMemberValidator }), addGroupMember);
+router.post('/:chatId/add-member', protect, chatLimiter, validateRequest({ paramsSchema: chatIdParamValidator, bodySchema: addGroupMemberValidator }), addGroupMember);
 
-router.post('/:chatId/remove-member', protect, chatLimiter, validateRequest({ bodySchema: removeGroupMemberValidator }), removeGroupMember);
+router.post('/:chatId/remove-member', protect, chatLimiter, validateRequest({ paramsSchema: chatIdParamValidator, bodySchema: removeGroupMemberValidator }), removeGroupMember);
 
 module.exports = router;
