@@ -5,7 +5,9 @@ const asyncHandler = require('./asyncHandler');
 const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const { initializeUserStats } = require('../services/userStatsService');
+const { sendResetCodeEmail } = require('../services/emailService');
 
 // Helper function to generate a short-lived access token (15 minutes)
 const generateToken = (id) => {
@@ -15,8 +17,12 @@ const generateToken = (id) => {
 };
 
 // Helper function to generate a refresh token (7 days)
-const generateRefreshToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET, {
+const generateRefreshToken = (id, key) => {
+  const secret = process.env.JWT_REFRESH_SECRET;
+  if (!secret && process.env.NODE_ENV === 'production') {
+    console.error('CRITICAL: JWT_REFRESH_SECRET is not set in production!');
+  }
+  return jwt.sign({ id, key }, secret || process.env.JWT_SECRET, {
     expiresIn: '7d',
   });
 };
@@ -35,26 +41,40 @@ exports.registerUser = asyncHandler(async (req, res) => {
     throw new Error('User with this email already exists');
   }
 
-  // Generate a base username then make it unique with a random suffix
-  // to avoid collisions on same-millisecond registrations
-  const baseUsername = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const randomSuffix = Math.random().toString(36).slice(2, 7);
-  const username = baseUsername + randomSuffix;
+  // Helper to generate a unique username
+  const generateUniqueUsername = async (baseName) => {
+    const baseUsername = baseName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    let username = baseUsername + Math.random().toString(36).slice(2, 7);
 
-  // Guard against duplicate username (extremely rare but possible)
-  const usernameExists = await User.findOne({ username });
-  if (usernameExists) {
-    res.status(500);
-    throw new Error('Could not generate unique username, please try again');
+    // Check for collision (loop a few times if needed)
+    let attempts = 0;
+    while (attempts < 5) {
+      const exists = await User.findOne({ username });
+      if (!exists) return username;
+      username = baseUsername + Math.random().toString(36).slice(2, 7);
+      attempts++;
+    }
+    return username;
+  };
+
+  const username = await generateUniqueUsername(name);
+
+  // Create user
+  let user;
+  try {
+    user = await User.create({
+      name,
+      email,
+      password,
+      username,
+    });
+  } catch (error) {
+    if (error.code === 11000) {
+      res.status(400);
+      throw new Error('Username or email already in use. Please try again.');
+    }
+    throw error;
   }
-
-  // Create user with pre-validated and sanitized data
-  const user = await User.create({
-    name,
-    email,
-    password,
-    username,
-  });
 
   if (user) {
     // Initialize UserStats for the new user
@@ -67,13 +87,15 @@ exports.registerUser = asyncHandler(async (req, res) => {
 
     // Generate tokens
     const accessToken = generateToken(user._id);
-    const refreshToken = generateRefreshToken(user._id);
+    const tokenKey = crypto.randomBytes(16).toString('hex');
+    const refreshToken = generateRefreshToken(user._id, tokenKey);
     
     // Hash and store refresh token in DB
     const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
     
     user.refreshTokens.push({
+      key: tokenKey,
       token: hashedRefreshToken,
       expiresAt,
       deviceId: req.body.deviceId || 'unknown',
@@ -88,7 +110,7 @@ exports.registerUser = asyncHandler(async (req, res) => {
       name: user.name,
       username: user.username,
       email: user.email,
-      profilePicture: user.profilePicture,
+      profilePicture: user.profilePicture ? (typeof user.profilePicture === 'string' ? user.profilePicture : user.profilePicture.secure_url) : null,
       accessToken,
       refreshToken,
     });
@@ -129,13 +151,15 @@ exports.loginUser = asyncHandler(async (req, res) => {
 
   // Generate tokens
   const accessToken = generateToken(user._id);
-  const refreshToken = generateRefreshToken(user._id);
+  const tokenKey = crypto.randomBytes(16).toString('hex');
+  const refreshToken = generateRefreshToken(user._id, tokenKey);
   
   // Hash and store refresh token in DB
   const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
   
   user.refreshTokens.push({
+    key: tokenKey,
     token: hashedRefreshToken,
     expiresAt,
     deviceId: deviceId || 'unknown',
@@ -149,7 +173,7 @@ exports.loginUser = asyncHandler(async (req, res) => {
     name: user.name,
     username: user.username,
     email: user.email,
-    profilePicture: user.profilePicture,
+    profilePicture: user.profilePicture ? (typeof user.profilePicture === 'string' ? user.profilePicture : user.profilePicture.secure_url) : null,
     accessToken,
     refreshToken,
   });
@@ -164,11 +188,10 @@ exports.setup2FA = asyncHandler(async (req, res) => {
     name: `AstraChitChat (${user.email})`,
   });
 
-  user.twoFactorSecret = secret.base32;
+  // Store in temp field until verified
+  user.twoFactorTempSecret = secret.base32;
   await user.save();
 
-  // FIX: use promise-based QRCode.toDataURL instead of callback
-  // so errors are caught by asyncHandler properly
   const data_url = await QRCode.toDataURL(secret.otpauth_url);
   res.json({ secret: secret.base32, qrCode: data_url });
 });
@@ -179,17 +202,23 @@ exports.setup2FA = asyncHandler(async (req, res) => {
 // @validation Uses Joi validation middleware for token format validation
 exports.verify2FASetup = asyncHandler(async (req, res) => {
   const { token } = req.body;
-  // Token format already validated by Joi middleware (6 digits)
-  const user = await User.findById(req.user._id);
+  const user = await User.findById(req.user._id).select('+twoFactorTempSecret');
+
+  if (!user.twoFactorTempSecret) {
+    res.status(400);
+    throw new Error('2FA setup not initiated');
+  }
 
   const verified = speakeasy.totp.verify({
-    secret: user.twoFactorSecret,
+    secret: user.twoFactorTempSecret,
     encoding: 'base32',
     token,
   });
 
   if (verified) {
     user.isTwoFactorEnabled = true;
+    user.twoFactorSecret = user.twoFactorTempSecret;
+    user.twoFactorTempSecret = undefined;
     await user.save();
     res.json({ message: '2FA enabled successfully' });
   } else {
@@ -243,13 +272,15 @@ exports.verifyLogin2FA = asyncHandler(async (req, res) => {
   if (verified) {
     // Generate tokens
     const accessToken = generateToken(user._id);
-    const refreshToken = generateRefreshToken(user._id);
+    const tokenKey = crypto.randomBytes(16).toString('hex');
+    const refreshToken = generateRefreshToken(user._id, tokenKey);
     
     // Hash and store refresh token in DB
     const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
     
     user.refreshTokens.push({
+      key: tokenKey,
       token: hashedRefreshToken,
       expiresAt,
       deviceId: deviceId || 'unknown',
@@ -263,7 +294,7 @@ exports.verifyLogin2FA = asyncHandler(async (req, res) => {
       name: user.name,
       username: user.username,
       email: user.email,
-      profilePicture: user.profilePicture,
+      profilePicture: user.profilePicture ? (typeof user.profilePicture === 'string' ? user.profilePicture : user.profilePicture.secure_url) : null,
       accessToken,
       refreshToken,
     });
@@ -281,18 +312,21 @@ exports.logoutUser = asyncHandler(async (req, res) => {
   const userId = req.user._id;
 
   if (refreshToken) {
-    // Find the refresh token in the user's array and delete it
-    const user = await User.findById(userId);
-    
-    // Find the matching refresh token
-    const tokenIndex = user.refreshTokens.findIndex(async (rt) => {
-      return await bcrypt.compare(refreshToken, rt.token);
-    });
+    try {
+      // Decode to get the key (even if expired, we might want to allow logout)
+      const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET, { ignoreExpiration: true });
 
-    if (tokenIndex > -1) {
-      user.refreshTokens.splice(tokenIndex, 1);
-      await user.save();
-      console.log(`✅ User ${userId} logged out from device`);
+      const user = await User.findById(userId);
+      if (user && decoded.key) {
+        const tokenIndex = user.refreshTokens.findIndex(t => t.key === decoded.key);
+        if (tokenIndex > -1) {
+          user.refreshTokens.splice(tokenIndex, 1);
+          await user.save();
+          console.log(`✅ User ${userId} logged out from device (key: ${decoded.key})`);
+        }
+      }
+    } catch (err) {
+      console.error('Logout error (token decode failed):', err.message);
     }
   }
   
@@ -308,7 +342,6 @@ exports.logoutUser = asyncHandler(async (req, res) => {
 // @validation Uses Joi validation middleware for input sanitization
 exports.refreshAccessToken = asyncHandler(async (req, res) => {
   const { refreshToken } = req.body;
-  // Refresh token already validated as required by Joi middleware
 
   try {
     // Verify refresh token
@@ -320,50 +353,47 @@ exports.refreshAccessToken = asyncHandler(async (req, res) => {
       throw new Error('User not found');
     }
 
-    // Find matching refresh token in DB
-    let foundToken = null;
-    let foundTokenIndex = -1;
+    // Find matching refresh token in DB using the KEY (fast)
+    const foundTokenIndex = user.refreshTokens.findIndex(t => t.key === decoded.key);
 
-    for (let i = 0; i < user.refreshTokens.length; i++) {
-      const isMatch = await bcrypt.compare(refreshToken, user.refreshTokens[i].token);
-      if (isMatch) {
-        foundToken = user.refreshTokens[i];
-        foundTokenIndex = i;
-        break;
-      }
-    }
-
-    if (!foundToken) {
+    if (foundTokenIndex === -1) {
       res.status(401);
       throw new Error('Refresh token not found or invalid');
     }
 
+    const foundToken = user.refreshTokens[foundTokenIndex];
+
+    // Verify hashed token matches (extra security layer)
+    const isMatch = await bcrypt.compare(refreshToken, foundToken.token);
+    if (!isMatch) {
+      res.status(401);
+      throw new Error('Invalid refresh token');
+    }
+
     // Check if refresh token has expired
     if (new Date() > foundToken.expiresAt) {
-      // Remove expired token
       user.refreshTokens.splice(foundTokenIndex, 1);
       await user.save();
       res.status(401);
       throw new Error('Refresh token has expired');
     }
 
-    // Update lastUsedAt
-    foundToken.lastUsedAt = new Date();
-    
-    // Generate new tokens
+    // Generate new tokens (Rotation)
     const newAccessToken = generateToken(user._id);
-    const newRefreshToken = generateRefreshToken(user._id);
+    const newTokenKey = crypto.randomBytes(16).toString('hex');
+    const newRefreshToken = generateRefreshToken(user._id, newTokenKey);
 
-    // Hash and replace the old refresh token with the new one (token rotation)
+    // Replace the old refresh token with the new one
     const hashedNewRefreshToken = await bcrypt.hash(newRefreshToken, 10);
     user.refreshTokens[foundTokenIndex] = {
+      key: newTokenKey,
       token: hashedNewRefreshToken,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
-      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      createdAt: foundToken.createdAt,
       lastUsedAt: new Date(),
       deviceId: foundToken.deviceId,
-      ipAddress: foundToken.ipAddress,
-      userAgent: foundToken.userAgent,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
     };
     
     await user.save();
@@ -399,4 +429,154 @@ exports.logoutAllDevices = asyncHandler(async (req, res) => {
     message: 'Logged out from all devices successfully',
     userId: userId
   });
+});
+
+// @desc    Forgot password - generate 6-digit reset code
+// @route   POST /api/auth/forgot-password
+// @access  Public
+exports.forgotPassword = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  const normalizedEmail = email.toLowerCase().trim();
+  const user = await User.findOne({ email: normalizedEmail });
+
+  if (!user) {
+    res.status(404);
+    throw new Error('User with this email does not exist');
+  }
+
+  // Generate 6-digit reset code
+  const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+  // Hash and set to resetPasswordToken field
+  const hashedCode = crypto
+    .createHash('sha256')
+    .update(resetCode)
+    .digest('hex');
+
+  user.resetPasswordToken = hashedCode;
+
+  // Set expire (15 minutes for code)
+  user.resetPasswordExpire = Date.now() + 15 * 60 * 1000;
+
+  await user.save();
+
+  console.log(`[Auth] Generated OTP for ${normalizedEmail}: ${resetCode} (Hash: ${hashedCode})`);
+
+  // Send email via Brevo
+  try {
+    await sendResetCodeEmail(user.email, resetCode, user.name);
+  } catch (emailError) {
+    // If email fails, we might want to log it and potentially inform the user
+    // but in development we can still provide the code if needed
+    console.error('Failed to send reset email:', emailError.message);
+    if (process.env.NODE_ENV === 'production') {
+      res.status(500);
+      throw new Error('Error sending reset email. Please try again later.');
+    }
+  }
+
+  const response = { message: 'Reset code sent to your email' };
+  if (process.env.NODE_ENV !== 'production') {
+    response.resetCode = resetCode;
+    response.debug_note = "Development mode: Code also included here.";
+  }
+
+  res.json(response);
+});
+
+// @desc    Verify reset code
+// @route   POST /api/auth/verify-reset-code
+// @access  Public
+exports.verifyResetCode = asyncHandler(async (req, res) => {
+  const { email, code } = req.body;
+
+  console.log('[Auth] Incoming verify-reset-code request:', { email, code });
+
+  if (!code) {
+    res.status(400);
+    throw new Error('Verification code is required');
+  }
+
+  // Ensure code is string and trimmed before hashing
+  const codeStr = code.toString().trim();
+  const normalizedEmail = email.toLowerCase().trim();
+
+  const hashedCode = crypto
+    .createHash('sha256')
+    .update(codeStr)
+    .digest('hex');
+
+  // Find user by email first to provide better diagnostic feedback
+  const user = await User.findOne({ email: normalizedEmail });
+
+  if (!user) {
+    console.warn(`[Auth] Verification failed: No user found with email ${normalizedEmail}`);
+    res.status(400);
+    throw new Error('Invalid or expired reset code');
+  }
+
+  const isTokenMatch = user.resetPasswordToken === hashedCode;
+  const isExpired = user.resetPasswordExpire < Date.now();
+
+  if (!isTokenMatch || isExpired) {
+    console.warn(`[Auth] Verification failed for ${normalizedEmail}.
+    - Stored Hash: ${user.resetPasswordToken || 'NULL'}
+    - Input Hash:  ${hashedCode}
+    - Match: ${isTokenMatch}
+    - Expired: ${isExpired} (Expires at: ${user.resetPasswordExpire})
+    - Entered Code: "${codeStr}"
+    - Current Time: ${new Date().toISOString()}`);
+
+    res.status(400);
+    throw new Error(isExpired ? 'Reset code has expired' : 'Invalid reset code');
+  }
+
+  console.log(`[Auth] Code verified successfully for: ${user.email}`);
+
+  // Generate a temporary long-lived token to allow password reset
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  user.resetPasswordToken = crypto
+    .createHash('sha256')
+    .update(resetToken)
+    .digest('hex');
+
+  // Give them 10 minutes to set the new password
+  user.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
+  await user.save();
+
+  res.json({
+    message: 'Code verified successfully',
+    resetToken
+  });
+});
+
+// @desc    Reset password
+// @route   POST /api/auth/reset-password
+// @access  Public
+exports.resetPassword = asyncHandler(async (req, res) => {
+  const { resetToken, password } = req.body;
+
+  // Get hashed token
+  const hashedToken = crypto
+    .createHash('sha256')
+    .update(resetToken)
+    .digest('hex');
+
+  const user = await User.findOne({
+    resetPasswordToken: hashedToken,
+    resetPasswordExpire: { $gt: Date.now() },
+  });
+
+  if (!user) {
+    res.status(400);
+    throw new Error('Invalid or expired reset token. Please start over.');
+  }
+
+  // Set new password
+  user.password = password;
+  user.resetPasswordToken = undefined;
+  user.resetPasswordExpire = undefined;
+  await user.save();
+
+  res.json({ message: 'Password reset successful' });
 });

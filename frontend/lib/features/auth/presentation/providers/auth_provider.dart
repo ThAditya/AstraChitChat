@@ -73,6 +73,40 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  Future<void> forgotPassword(String email) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      await _repository.forgotPassword(email);
+      state = state.copyWith(isLoading: false);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+      rethrow;
+    }
+  }
+
+  Future<String> verifyResetCode(String email, String code) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final token = await _repository.verifyResetCode(email, code);
+      state = state.copyWith(isLoading: false);
+      return token;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+      rethrow;
+    }
+  }
+
+  Future<void> resetPassword(String resetToken, String password) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      await _repository.resetPassword(resetToken, password);
+      state = state.copyWith(isLoading: false);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+      rethrow;
+    }
+  }
+
   Future<void> _saveUser(UserModel user) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('accessToken', user.accessToken ?? '');

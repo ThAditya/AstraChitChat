@@ -71,10 +71,6 @@ class ProfileRepository {
         '/media/upload/profile-picture',
         data: formData,
       );
-      // This endpoint returns { success, message, url, publicId }
-      // We might need to fetch the profile again or the backend should return the updated user.
-      // Looking at mediaRoutes.js, it updates the user and returns success.
-      // Let's fetch the profile to get the full updated state.
       return await getMyProfile();
     } on DioException catch (e) {
       throw _handleDioError(e, 'Failed to upload profile picture');
@@ -93,6 +89,42 @@ class ProfileRepository {
       return await getMyProfile();
     } on DioException catch (e) {
       throw _handleDioError(e, 'Failed to upload cover photo');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getFollowers(String userId) async {
+    try {
+      final response = await _apiClient.dio.get('/follow/$userId/followers');
+      // Response structure: { followers: [...], count: 0, hasMore: false }
+      return List<Map<String, dynamic>>.from(response.data['followers']);
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to fetch followers');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getFollowing(String userId) async {
+    try {
+      final response = await _apiClient.dio.get('/follow/$userId/following');
+      // Response structure: { following: [...], count: 0, hasMore: false }
+      return List<Map<String, dynamic>>.from(response.data['following']);
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to fetch following');
+    }
+  }
+
+  Future<void> followUser(String userId) async {
+    try {
+      await _apiClient.dio.post('/follow/$userId');
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to follow user');
+    }
+  }
+
+  Future<void> unfollowUser(String userId) async {
+    try {
+      await _apiClient.dio.delete('/follow/$userId');
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to unfollow user');
     }
   }
 

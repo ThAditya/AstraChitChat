@@ -154,7 +154,7 @@ function sanitizeChatForResponse(chat, userId) {
         lastMessageObj.sender = {
           _id: chatObj.lastMessage.sender,
           username: 'User',
-          profilePicture: '',
+          profilePicture: null,
           name: 'User',
         };
       }
@@ -221,7 +221,7 @@ function ensureMessageSenderPopulated(message) {
       msg.sender = {
         _id: msg.sender,
         username: 'Unknown User',
-        profilePicture: '',
+        profilePicture: null,
         name: 'Unknown',
       };
     }

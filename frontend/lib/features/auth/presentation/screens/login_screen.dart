@@ -196,6 +196,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             .animate()
                             .fadeIn(delay: 100.ms)
                             .slideY(begin: 0.1),
+
+                        SizedBox(height: 8.h),
+
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: GestureDetector(
+                            onTap: () => context.push(AppRouter.forgotPassword),
+                            child: Text(
+                              "Forgot Password?",
+                              style: GoogleFonts.inter(
+                                fontSize: 13.sp,
+                                color: AppColors.primaryNeon,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ).animate().fadeIn(delay: 700.ms),
                       ] else
                         PhoneInputField(controller: _phoneController)
                             .animate()

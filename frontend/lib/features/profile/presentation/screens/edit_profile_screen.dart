@@ -133,6 +133,28 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     }
   }
 
+  Future<void> _pickCoverPhoto() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+
+    if (image != null) {
+      try {
+        await ref.read(myProfileProvider.notifier).uploadCoverPhoto(image.path);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Cover photo updated')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to upload cover photo: $e')),
+          );
+        }
+      }
+    }
+  }
+
   Future<void> _selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -208,36 +230,103 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Center(
-                  child: Stack(
-                    children: [
-                      CircleAvatar(
-                        radius: 50.r,
-                        backgroundImage: profileState.profile?.profilePicture != null && profileState.profile!.profilePicture!.isNotEmpty
-                            ? NetworkImage(profileState.profile!.profilePicture!)
-                            : null,
-                        child: profileState.profile?.profilePicture == null || profileState.profile!.profilePicture!.isEmpty
-                            ? Icon(Icons.person, size: 50.r, color: Colors.white)
-                            : null,
-                      ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: GestureDetector(
-                          onTap: _pickImage,
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Column(
+                      children: [
+                        GestureDetector(
+                          onTap: _pickCoverPhoto,
                           child: Container(
-                            padding: EdgeInsets.all(8.r),
+                            height: 150.h,
+                            width: double.infinity,
                             decoration: BoxDecoration(
-                              color: AppColors.secondaryNeon,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: AppColors.background, width: 2),
+                              color: Colors.white.withOpacity(0.05),
+                              borderRadius: BorderRadius.circular(16.r),
+                              image: profileState.profile?.coverPhoto != null && profileState.profile!.coverPhoto!.isNotEmpty
+                                  ? DecorationImage(
+                                      image: NetworkImage(profileState.profile!.coverPhoto!),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : null,
                             ),
-                            child: Icon(Iconsax.camera_copy, color: Colors.black, size: 18.sp),
+                            child: profileState.profile?.coverPhoto == null || profileState.profile!.coverPhoto!.isEmpty
+                                ? Center(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Iconsax.image_copy, color: Colors.white24, size: 30.sp),
+                                        SizedBox(height: 8.h),
+                                        Text(
+                                          'Add Cover Photo',
+                                          style: GoogleFonts.inter(color: Colors.white24, fontSize: 12.sp),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                : Container(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          Colors.transparent,
+                                          Colors.black.withOpacity(0.5),
+                                        ],
+                                      ),
+                                    ),
+                                    child: Align(
+                                      alignment: Alignment.bottomRight,
+                                      child: Padding(
+                                        padding: EdgeInsets.all(8.r),
+                                        child: Icon(Iconsax.camera_copy, color: Colors.white, size: 20.sp),
+                                      ),
+                                    ),
+                                  ),
                           ),
                         ),
+                        SizedBox(height: 50.h),
+                      ],
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      child: Stack(
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: AppColors.background, width: 4),
+                            ),
+                            child: CircleAvatar(
+                              radius: 50.r,
+                              backgroundImage: profileState.profile?.profilePicture != null && profileState.profile!.profilePicture!.isNotEmpty
+                                  ? NetworkImage(profileState.profile!.profilePicture!)
+                                  : null,
+                              child: profileState.profile?.profilePicture == null || profileState.profile!.profilePicture!.isEmpty
+                                  ? Icon(Icons.person, size: 50.r, color: Colors.white)
+                                  : null,
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: GestureDetector(
+                              onTap: _pickImage,
+                              child: Container(
+                                padding: EdgeInsets.all(8.r),
+                                decoration: BoxDecoration(
+                                  color: AppColors.secondaryNeon,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: AppColors.background, width: 2),
+                                ),
+                                child: Icon(Iconsax.camera_copy, color: Colors.black, size: 18.sp),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ).animate().fadeIn().scale(),
                 SizedBox(height: 32.h),
                 

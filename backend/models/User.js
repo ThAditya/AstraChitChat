@@ -83,6 +83,12 @@ const userSchema = new mongoose.Schema(
         default: ''
     },
 
+    category: {
+        type: String,
+        maxlength: 50,
+        default: 'Digital Creator'
+    },
+
     pronouns: {
         type: String,
         maxlength: 20,
@@ -194,9 +200,19 @@ const userSchema = new mongoose.Schema(
         select: false
     },
 
+    twoFactorTempSecret: {
+        type: String,
+        default: null,
+        select: false
+    },
+
     // 🔑 Refresh Tokens for Multi-Device Support
     refreshTokens: [
         {
+            key: {
+                type: String,
+                required: true
+            },
             token: {
                 type: String,
                 required: true
@@ -222,7 +238,10 @@ const userSchema = new mongoose.Schema(
                 default: Date.now
             }
         }
-    ]
+    ],
+
+    resetPasswordToken: String,
+    resetPasswordExpire: Date
 },
 {
     timestamps: true
@@ -232,15 +251,24 @@ const userSchema = new mongoose.Schema(
 
 // 🔐 Hash password before saving
 userSchema.pre('save', async function (next) {
-    if (!this.isModified('password')) return next();
-
-    try {
-        const salt = await bcrypt.genSalt(10);
-        this.password = await bcrypt.hash(this.password, salt);
-        next();
-    } catch (error) {
-        next(error);
+    // 1. Password hashing
+    if (this.isModified('password')) {
+        try {
+            const salt = await bcrypt.genSalt(10);
+            this.password = await bcrypt.hash(this.password, salt);
+        } catch (error) {
+            return next(error);
+        }
     }
+
+    // 2. Limit refresh tokens (prevent array bloat)
+    // Keep only the 10 most recently used/created sessions
+    if (this.isModified('refreshTokens') && this.refreshTokens.length > 10) {
+        this.refreshTokens.sort((a, b) => (b.lastUsedAt || b.createdAt) - (a.lastUsedAt || a.createdAt));
+        this.refreshTokens = this.refreshTokens.slice(0, 10);
+    }
+
+    next();
 });
 
 

@@ -1,6 +1,7 @@
 const asyncHandler = require('./asyncHandler');
 const { Story, User } = require('../models');
 const { deleteCloudinaryAsset } = require('../services/mediaService');
+const { applyUserDefaults } = require('../utils/lazyDefaults');
 
 // ─── Upload Story ─────────────────────────────────────────────────────────────
 // @route   POST /api/stories
@@ -94,10 +95,15 @@ exports.uploadStory = asyncHandler(async (req, res) => {
     // Populate author details
     await story.populate('author', 'name username profilePicture');
 
+    const storyObj = story.toObject();
+    if (storyObj.author) {
+        storyObj.author = applyUserDefaults(storyObj.author);
+    }
+
     res.status(201).json({
         success: true,
         message: 'Story uploaded successfully',
-        data: story
+        data: storyObj
     });
 });
 
@@ -130,9 +136,12 @@ exports.getStoriesFeed = asyncHandler(async (req, res) => {
     // Populate author with needed fields after lean
     const storiesWithAuthor = await Promise.all(
         stories.map(async (story) => {
-            const author = await User.findById(story.author)
+            let author = await User.findById(story.author)
                 .select('name username profilePicture')
                 .lean();
+            if (author) {
+                author = applyUserDefaults(author);
+            }
             return { ...story, author };
         })
     );
@@ -163,9 +172,12 @@ exports.getUserStories = asyncHandler(async (req, res) => {
     // Populate author with needed fields after lean
     const storiesWithAuthor = await Promise.all(
         stories.map(async (story) => {
-            const author = await User.findById(story.author)
+            let author = await User.findById(story.author)
                 .select('name username profilePicture')
                 .lean();
+            if (author) {
+                author = applyUserDefaults(author);
+            }
             return { ...story, author };
         })
     );
@@ -259,7 +271,13 @@ exports.getStoryViewers = asyncHandler(async (req, res) => {
         return res.status(403).json({ success: false, message: 'Not authorized to view story viewers.' });
     }
 
-    res.json({ success: true, data: story.viewedBy });
+    res.json({ success: true, data: story.viewedBy.map(v => {
+        const vObj = v.toObject ? v.toObject() : v;
+        if (vObj.user) {
+            vObj.user = applyUserDefaults(vObj.user);
+        }
+        return vObj;
+    }) });
 });
 
 // ─── Helper: group stories by user for feed ring UI ──────────────────────────

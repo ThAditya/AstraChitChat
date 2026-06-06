@@ -1,6 +1,26 @@
 const Follower = require('../models/Follower');
 const User = require('../models/User');
-const { incrementStat, decrementStat } = require('../services/userStatsService');
+const { incrementStat, decrementStat, syncUserStats } = require('../services/userStatsService');
+const { applyUserDefaults } = require('../utils/lazyDefaults');
+
+const CLOUDINARY_CLOUD = process.env.CLOUDINARY_CLOUD_NAME || 'astrachat';
+
+// Helper: build Cloudinary URL with transformations
+function buildCloudinaryUrl(publicId, opts = {}) {
+    if (!publicId) return null;
+    const { width, height, crop = 'fill', gravity, radius, quality = 'auto', format = 'auto' } = opts;
+    const transforms = [
+        width    && `w_${width}`,
+        height   && `h_${height}`,
+        crop     && `c_${crop}`,
+        gravity  && `g_${gravity}`,
+        radius   && `r_${radius}`,
+        `q_${quality}`,
+        `f_${format}`,
+    ].filter(Boolean).join(',');
+
+    return `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/image/upload/${transforms}/${publicId}`;
+}
 
 // @desc    Follow a user
 // @route   POST /api/follow/:userId
@@ -130,13 +150,32 @@ const getFollowers = async (req, res) => {
     const totalMatch = await Follower.countDocuments({ following: userId, status: 'accepted' });
 
     const followers = await Follower.find({ following: userId, status: 'accepted' })
-      .populate('follower', 'name username profilePicture')
+      .populate('follower', 'name username profilePicture profilePublicId')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
 
+    // Sync stats in background if count discrepancy is likely
+    // (We only do this for the first page to avoid redundant hits)
+    if (page === 1) {
+        syncUserStats(userId).catch(err => console.error(`[getFollowers] Sync failed:`, err.message));
+    }
+
     res.json({
-      followers: followers.map(f => f.follower),
+      followers: followers.map(f => {
+        if (!f.follower) return null;
+
+        const enriched = applyUserDefaults(f.follower);
+        const profilePublicId = enriched.profilePublicId || enriched.profilePicture?.public_id;
+        const profilePictureUrl = profilePublicId
+            ? buildCloudinaryUrl(profilePublicId, { width: 400, height: 400, gravity: 'face', radius: 'max' })
+            : null;
+
+        return {
+          ...enriched,
+          profilePicture: profilePictureUrl
+        };
+      }).filter(Boolean),
       count: totalMatch,
       hasMore: totalMatch > skip + followers.length,
     });
@@ -158,13 +197,31 @@ const getFollowing = async (req, res) => {
     const totalMatch = await Follower.countDocuments({ follower: userId, status: 'accepted' });
 
     const following = await Follower.find({ follower: userId, status: 'accepted' })
-      .populate('following', 'name username profilePicture')
+      .populate('following', 'name username profilePicture profilePublicId')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
 
+    // Sync stats in background
+    if (page === 1) {
+        syncUserStats(userId).catch(err => console.error(`[getFollowing] Sync failed:`, err.message));
+    }
+
     res.json({
-      following: following.map(f => f.following),
+      following: following.map(f => {
+        if (!f.following) return null;
+
+        const enriched = applyUserDefaults(f.following);
+        const profilePublicId = enriched.profilePublicId || enriched.following?.profilePicture?.public_id;
+        const profilePictureUrl = profilePublicId
+            ? buildCloudinaryUrl(profilePublicId, { width: 400, height: 400, gravity: 'face', radius: 'max' })
+            : null;
+
+        return {
+          ...enriched,
+          profilePicture: profilePictureUrl
+        };
+      }).filter(Boolean),
       count: totalMatch,
       hasMore: totalMatch > skip + following.length,
     });
@@ -277,7 +334,16 @@ const getFollowRequests = async (req, res) => {
       status: 'pending'
     }).populate('follower', 'name username profilePicture');
 
-    res.json({ requests: pendingRequests.map(r => r.follower) || [] });
+    res.json({
+      requests: pendingRequests.map(r => {
+        if (!r.follower) return null;
+        const user = r.follower.toObject ? r.follower.toObject() : r.follower;
+        return {
+          ...user,
+          profilePicture: user.profilePicture ? (typeof user.profilePicture === 'string' ? user.profilePicture : user.profilePicture.secure_url) : null
+        };
+      }).filter(Boolean) || []
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server error: could not fetch follow requests', error: error.message });
   }

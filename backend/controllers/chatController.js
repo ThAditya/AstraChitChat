@@ -234,7 +234,7 @@ async function getChatMessages(req, res) {
         _id: msg.quotedMsgId._id,
         bodyText: msg.quotedMsgId.bodyText || '[Media message]',
         msgType: msg.quotedMsgId.msgType || 'text',
-        sender: msg.quotedMsgId.sender ? applyUserDefaults(msg.quotedMsgId.sender) : { _id: '', username: 'Unknown', profilePicture: '' },
+        sender: msg.quotedMsgId.sender ? applyUserDefaults(msg.quotedMsgId.sender) : { _id: '', username: 'Unknown', profilePicture: null },
         mediaUrl: msg.quotedMsgId.mediaUrl
       } : null
     }));

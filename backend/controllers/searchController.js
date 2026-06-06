@@ -28,6 +28,7 @@ const searchAll = async (req, res) => {
       $or: [
         { username: { $regex: q, $options: 'i' } },
         { name: { $regex: q, $options: 'i' } },
+        { category: { $regex: q, $options: 'i' } },
       ],
     })
       .select('username name profilePicture profilePublicId')

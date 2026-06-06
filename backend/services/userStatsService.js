@@ -181,6 +181,50 @@ const migrateStatsFromUser = async () => {
   }
 };
 
+/**
+ * Sync all stats for a user from original collections
+ * This fixes discrepancies between cached counts and actual document counts
+ */
+const syncUserStats = async (userId) => {
+  try {
+    const Post = require('../models/Post');
+    const Follower = require('../models/Follower');
+    const Like = require('../models/Like');
+
+    const [postsCount, followersCount, followingCount, totalLikesCount] = await Promise.all([
+      Post.countDocuments({ author: userId }),
+      Follower.countDocuments({ following: userId, status: 'accepted' }),
+      Follower.countDocuments({ follower: userId, status: 'accepted' }),
+      Like.countDocuments({ target: userId, targetType: 'user' }), // Adjust if likes are on posts
+    ]);
+
+    const userStats = await UserStats.findOneAndUpdate(
+      { userId },
+      {
+        postsCount,
+        followersCount,
+        followingCount,
+        totalLikesCount,
+        lastUpdated: Date.now()
+      },
+      { new: true, upsert: true }
+    );
+
+    // Also sync to User model for redundancy/backward compatibility
+    await User.findByIdAndUpdate(userId, {
+      postsCount,
+      followersCount,
+      followingCount
+    });
+
+    console.log(`✅ Synced stats for user ${userId}: ${followersCount} followers`);
+    return userStats;
+  } catch (error) {
+    console.error(`❌ Error syncing stats for ${userId}:`, error.message);
+    throw error;
+  }
+};
+
 module.exports = {
   initializeUserStats,
   incrementStat,
@@ -188,4 +232,5 @@ module.exports = {
   setStat,
   getUserStats,
   migrateStatsFromUser,
+  syncUserStats,
 };

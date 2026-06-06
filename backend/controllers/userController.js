@@ -7,6 +7,25 @@ const Chat = require('../models/Chat');
 const { deleteCloudinaryAsset } = require('../services/mediaService');
 const { applyUserDefaults } = require('../utils/lazyDefaults');
 
+const CLOUDINARY_CLOUD = process.env.CLOUDINARY_CLOUD_NAME || 'astrachat';
+
+// Helper: build Cloudinary URL with transformations
+function buildCloudinaryUrl(publicId, opts = {}) {
+    if (!publicId) return null;
+    const { width, height, crop = 'fill', gravity, radius, quality = 'auto', format = 'auto' } = opts;
+    const transforms = [
+        width    && `w_${width}`,
+        height   && `h_${height}`,
+        crop     && `c_${crop}`,
+        gravity  && `g_${gravity}`,
+        radius   && `r_${radius}`,
+        `q_${quality}`,
+        `f_${format}`,
+    ].filter(Boolean).join(',');
+
+    return `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/image/upload/${transforms}/${publicId}`;
+}
+
 // @desc    Search users by username or name
 // @route   GET /api/users/search?q=query
 // @access  Private
@@ -36,32 +55,13 @@ const searchUsers = async (req, res) => {
       .select('username name profilePicture profilePublicId isOnline lastSeen')
       .limit(20);
 
-    const CLOUDINARY_CLOUD = process.env.CLOUDINARY_CLOUD_NAME || 'astrachat';
-
-    // Helper: build Cloudinary URL with transformations
-    function buildCloudinaryUrl(publicId, opts = {}) {
-        if (!publicId) return '';
-        const { width, height, crop = 'fill', gravity, radius, quality = 'auto', format = 'auto' } = opts;
-        const transforms = [
-            width    && `w_${width}`,
-            height   && `h_${height}`,
-            crop     && `c_${crop}`,
-            gravity  && `g_${gravity}`,
-            radius   && `r_${radius}`,
-            `q_${quality}`,
-            `f_${format}`,
-        ].filter(Boolean).join(',');
-
-        return `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/image/upload/${transforms}/${publicId}`;
-    }
-
     // Apply lazy defaults and format profile picture
     const usersWithDefaults = users.map(user => {
       const enriched = applyUserDefaults(user);
       const profilePublicId = enriched.profilePublicId || enriched.profilePicture?.public_id;
       const profilePictureUrl = profilePublicId
           ? buildCloudinaryUrl(profilePublicId, { width: 400, height: 400, gravity: 'face', radius: 'max' })
-          : '';
+          : null;
 
       return {
         ...enriched,
@@ -177,8 +177,20 @@ const toggleMuteUser = async (req, res) => {
 const getBlockedUsers = async (req, res) => {
   try {
     const currentUser = await User.findById(req.user._id)
-      .populate('blockedUsers', 'name username profilePicture');
-    res.json(currentUser.blockedUsers || []);
+      .populate('blockedUsers', 'name username profilePicture profilePublicId');
+
+    const blockedUsers = (currentUser.blockedUsers || []).map(user => {
+      const enriched = applyUserDefaults(user);
+      const profilePublicId = enriched.profilePublicId || enriched.profilePicture?.public_id;
+      return {
+        ...enriched,
+        profilePicture: profilePublicId
+          ? buildCloudinaryUrl(profilePublicId, { width: 400, height: 400, gravity: 'face', radius: 'max' })
+          : null
+      };
+    });
+
+    res.json(blockedUsers);
   } catch (error) {
     console.error('Get blocked users error:', error);
     res.status(500).json({ 
@@ -194,8 +206,20 @@ const getBlockedUsers = async (req, res) => {
 const getMutedUsers = async (req, res) => {
   try {
     const currentUser = await User.findById(req.user._id)
-      .populate('mutedUsers', 'name username profilePicture');
-    res.json(currentUser.mutedUsers || []);
+      .populate('mutedUsers', 'name username profilePicture profilePublicId');
+
+    const mutedUsers = (currentUser.mutedUsers || []).map(user => {
+      const enriched = applyUserDefaults(user);
+      const profilePublicId = enriched.profilePublicId || enriched.profilePicture?.public_id;
+      return {
+        ...enriched,
+        profilePicture: profilePublicId
+          ? buildCloudinaryUrl(profilePublicId, { width: 400, height: 400, gravity: 'face', radius: 'max' })
+          : null
+      };
+    });
+
+    res.json(mutedUsers);
   } catch (error) {
     console.error('Get muted users error:', error);
     res.status(500).json({ 
@@ -217,7 +241,7 @@ const exportData = async (req, res) => {
       .select('-password -twoFactorSecret')
       .lean();
 
-    const posts  = await Post.find({ user: userId }).lean();
+    const posts  = await Post.find({ author: userId }).lean();
     const follows = await Follower.find({
       $or: [{ follower: userId }, { following: userId }],
     }).lean();
@@ -251,14 +275,18 @@ const deleteAccount = async (req, res) => {
     const userId = req.user._id;
 
     // Best-effort: clean up media files for all posts before deleting DB records
-    const posts = await Post.find({ user: userId }).select('mediaPublicId mediaType').lean();
+    // Post schema uses 'author' field and 'media' array
+    const posts = await Post.find({ author: userId }).select('media').lean();
     for (const post of posts) {
-      if (post.mediaPublicId) {
-        try {
-          const resourceType = post.mediaType === 'video' ? 'video' : 'image';
-          await deleteCloudinaryAsset(post.mediaPublicId, resourceType);
-        } catch (err) {
-          console.warn('Post media cleanup failed:', err.message);
+      if (post.media && Array.isArray(post.media)) {
+        for (const item of post.media) {
+          if (item.public_id) {
+            try {
+              await deleteCloudinaryAsset(item.public_id, item.resource_type || 'image');
+            } catch (err) {
+              console.warn('Post media cleanup failed:', err.message);
+            }
+          }
         }
       }
     }
@@ -281,7 +309,7 @@ const deleteAccount = async (req, res) => {
     }
 
     // Cascade delete DB records
-    await Post.deleteMany({ user: userId });
+    await Post.deleteMany({ author: userId });
     await Follower.deleteMany({ $or: [{ follower: userId }, { following: userId }] });
     await Like.deleteMany({ user: userId });
     await Message.deleteMany({ sender: userId });

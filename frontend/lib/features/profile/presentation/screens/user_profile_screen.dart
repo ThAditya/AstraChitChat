@@ -10,6 +10,7 @@ import 'package:chitchat/core/router/app_router.dart';
 import 'package:chitchat/core/theme/app_colors.dart';
 import 'package:chitchat/core/widgets/particle_background.dart';
 import 'package:chitchat/features/profile/presentation/screens/creator_dashboard_screen.dart';
+import 'package:chitchat/features/profile/presentation/screens/follow_list_screen.dart';
 import '../../domain/models/user_profile.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -270,8 +271,20 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _buildStat('Posts', profile.stats.posts.toString()),
-              _buildStat('Followers', profile.stats.followers.toString()),
-              _buildStat('Following', profile.stats.following.toString()),
+              _buildStat('Followers', profile.stats.followers.toString(), onTap: () {
+                context.push(AppRouter.followList, extra: {
+                  'userId': profile.id,
+                  'username': profile.username,
+                  'type': FollowListType.followers,
+                });
+              }),
+              _buildStat('Following', profile.stats.following.toString(), onTap: () {
+                context.push(AppRouter.followList, extra: {
+                  'userId': profile.id,
+                  'username': profile.username,
+                  'type': FollowListType.following,
+                });
+              }),
             ],
           ),
           SizedBox(height: 24.h),
@@ -405,25 +418,28 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
     );
   }
 
-  Widget _buildStat(String label, String value) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: GoogleFonts.orbitron(
-            fontSize: 16.sp,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
+  Widget _buildStat(String label, String value, {VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: GoogleFonts.orbitron(
+              fontSize: 16.sp,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
-        ),
-        Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 11.sp,
-            color: AppColors.textGrey,
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 11.sp,
+              color: AppColors.textGrey,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

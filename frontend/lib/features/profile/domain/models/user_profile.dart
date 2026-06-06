@@ -7,6 +7,7 @@ class UserProfile {
   final String bio;
   final String location;
   final String website;
+  final String category;
   final String pronouns;
   final DateTime? birthday;
   final String gender;
@@ -15,6 +16,7 @@ class UserProfile {
   final ProfileStats stats;
   final bool isPrivate;
   final bool isOnline;
+  final bool isVerified;
   final DateTime? lastSeen;
   final bool? isFollowing;
   final bool? isBlocked;
@@ -29,6 +31,7 @@ class UserProfile {
     this.bio = '',
     this.location = '',
     this.website = '',
+    this.category = 'Digital Creator',
     this.pronouns = '',
     this.birthday,
     this.gender = 'Prefer not to say',
@@ -37,6 +40,7 @@ class UserProfile {
     required this.stats,
     this.isPrivate = false,
     this.isOnline = false,
+    this.isVerified = false,
     this.lastSeen,
     this.isFollowing,
     this.isBlocked,
@@ -53,6 +57,7 @@ class UserProfile {
       bio: json['bio'] ?? '',
       location: json['location'] ?? '',
       website: json['website'] ?? '',
+      category: json['category'] ?? 'Digital Creator',
       pronouns: json['pronouns'] ?? '',
       birthday: json['birthday'] != null ? DateTime.tryParse(json['birthday']) : null,
       gender: json['gender'] ?? 'Prefer not to say',
@@ -61,6 +66,7 @@ class UserProfile {
       stats: ProfileStats.fromJson(json['stats'] ?? {}),
       isPrivate: json['isPrivate'] ?? false,
       isOnline: json['isOnline'] ?? false,
+      isVerified: json['isVerified'] ?? false,
       lastSeen: json['lastSeen'] != null ? DateTime.tryParse(json['lastSeen']) : null,
       isFollowing: json['isFollowing'],
       isBlocked: json['isBlocked'],
@@ -78,6 +84,7 @@ class UserProfile {
       'bio': bio,
       'location': location,
       'website': website,
+      'category': category,
       'pronouns': pronouns,
       'birthday': birthday?.toIso8601String(),
       'gender': gender,
@@ -86,6 +93,7 @@ class UserProfile {
       'stats': stats.toJson(),
       'isPrivate': isPrivate,
       'isOnline': isOnline,
+      'isVerified': isVerified,
       'lastSeen': lastSeen?.toIso8601String(),
       'isFollowing': isFollowing,
       'isBlocked': isBlocked,

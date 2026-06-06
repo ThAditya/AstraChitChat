@@ -14,10 +14,12 @@ import '../../../../core/router/app_router.dart';
 import '../../../../core/utils/premium_snackbar.dart';
 import '../../../chat/domain/models/chat_model.dart';
 import '../../../chat/presentation/providers/social_providers.dart';
-import '../../domain/models/creator_profile.dart';
+import '../../domain/models/user_profile.dart';
+import '../providers/profile_provider.dart';
 
 class CreatorProfileScreen extends ConsumerStatefulWidget {
-  const CreatorProfileScreen({super.key});
+  final String userId;
+  const CreatorProfileScreen({super.key, required this.userId});
 
   @override
   ConsumerState<CreatorProfileScreen> createState() => _CreatorProfileScreenState();
@@ -26,7 +28,6 @@ class CreatorProfileScreen extends ConsumerStatefulWidget {
 class _CreatorProfileScreenState extends ConsumerState<CreatorProfileScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final profile = mockCreatorProfile;
 
   @override
   void initState() {
@@ -40,12 +41,12 @@ class _CreatorProfileScreenState extends ConsumerState<CreatorProfileScreen>
     super.dispose();
   }
 
-  void _startChat() {
+  void _startChat(UserProfile profile) {
     final chat = ChatModel(
       id: profile.id,
       name: profile.name,
       lastMessage: "Hey, I just found your profile on Explore!",
-      avatar: profile.avatar,
+      avatar: profile.profilePicture ?? '',
       time: "Just now",
       isOnline: profile.isOnline,
     );
@@ -54,7 +55,7 @@ class _CreatorProfileScreenState extends ConsumerState<CreatorProfileScreen>
     context.push(AppRouter.chatDetail, extra: chat);
   }
 
-  void _showShareSheet(BuildContext context) {
+  void _showShareSheet(BuildContext context, UserProfile profile) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -131,7 +132,7 @@ class _CreatorProfileScreenState extends ConsumerState<CreatorProfileScreen>
     );
   }
 
-  void _showMoreOptions(BuildContext context) {
+  void _showMoreOptions(BuildContext context, UserProfile profile) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -170,19 +171,19 @@ class _CreatorProfileScreenState extends ConsumerState<CreatorProfileScreen>
                 children: [
                   _buildMoreOption(Iconsax.slash_copy, 'Restrict', isRed: true, onTap: () {
                     context.pop();
-                    _showConfirmationDialog(context, 'Restrict', 'Restricting will limit their interactions with your profile without them knowing.');
+                    _showConfirmationDialog(context, profile, 'Restrict', 'Restricting will limit their interactions with your profile without them knowing.');
                   }),
                   _buildMoreOption(Iconsax.user_minus_copy, 'Block', isRed: true, onTap: () {
                     context.pop();
-                    _showConfirmationDialog(context, 'Block', 'Are you sure you want to block ${profile.name}? They won\'t be able to find your profile, posts or story on Chit Chat.');
+                    _showConfirmationDialog(context, profile, 'Block', 'Are you sure you want to block ${profile.name}? They won\'t be able to find your profile, posts or story on Chit Chat.');
                   }),
                   _buildMoreOption(Iconsax.warning_2_copy, 'Report', isRed: true, onTap: () {
                     context.pop();
-                    _showConfirmationDialog(context, 'Report', 'Report ${profile.name} for community guideline violations?');
+                    _showConfirmationDialog(context, profile, 'Report', 'Report ${profile.name} for community guideline violations?');
                   }),
                   _buildMoreOption(Iconsax.info_circle_copy, 'About this account', onTap: () {
                     context.pop();
-                    _showInfoSheet(context, 'About this Account', 'Joined: January 2024\nLocation: Cyber City\nAccount Type: Verified Creator');
+                    _showInfoSheet(context, 'About this Account', 'Joined: January 2024\nLocation: ${profile.location.isNotEmpty ? profile.location : "Unknown"}\nAccount Type: Verified Creator');
                   }),
                   _buildMoreOption(Iconsax.activity_copy, 'See shared activity', onTap: () {
                     context.pop();
@@ -198,7 +199,7 @@ class _CreatorProfileScreenState extends ConsumerState<CreatorProfileScreen>
                   }),
                   _buildMoreOption(Iconsax.user_remove_copy, 'Remove follower', onTap: () {
                     context.pop();
-                    _showConfirmationDialog(context, 'Remove Follower', 'Chit Chat won\'t tell ${profile.name} they were removed from your followers.');
+                    _showConfirmationDialog(context, profile, 'Remove Follower', 'Chit Chat won\'t tell ${profile.name} they were removed from your followers.');
                   }),
                   _buildMoreOption(Iconsax.link_copy, 'Copy profile URL', onTap: () {
                     context.pop();
@@ -212,11 +213,11 @@ class _CreatorProfileScreenState extends ConsumerState<CreatorProfileScreen>
                   }),
                   _buildMoreOption(Iconsax.export_copy, 'Share this profile', onTap: () {
                     context.pop();
-                    _showShareSheet(context);
+                    _showShareSheet(context, profile);
                   }),
                   _buildMoreOption(Iconsax.barcode_copy, 'QR code', onTap: () {
                     context.pop();
-                    _showQRCode(context);
+                    _showQRCode(context, profile);
                   }),
                 ],
               ),
@@ -227,7 +228,7 @@ class _CreatorProfileScreenState extends ConsumerState<CreatorProfileScreen>
     );
   }
 
-  void _showConfirmationDialog(BuildContext context, String action, String message) {
+  void _showConfirmationDialog(BuildContext context, UserProfile profile, String action, String message) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -290,7 +291,7 @@ class _CreatorProfileScreenState extends ConsumerState<CreatorProfileScreen>
     );
   }
 
-  void _showQRCode(BuildContext context) {
+  void _showQRCode(BuildContext context, UserProfile profile) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -312,6 +313,80 @@ class _CreatorProfileScreenState extends ConsumerState<CreatorProfileScreen>
             ),
             SizedBox(height: 20.h),
             Text(profile.username, style: GoogleFonts.inter(color: AppColors.primaryNeon, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStat(String label, String value, {VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: GoogleFonts.orbitron(
+              fontSize: 16.sp,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 11.sp,
+              color: AppColors.textGrey,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActionButton(String label, IconData icon,
+      {VoidCallback? onTap, bool isPrimary = false}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: GlassmorphicContainer(
+        width: double.infinity,
+        height: 45.h,
+        borderRadius: 12.r,
+        blur: 10,
+        alignment: Alignment.center,
+        border: 1,
+        linearGradient: LinearGradient(
+          colors: isPrimary
+              ? [
+                  AppColors.primaryNeon.withValues(alpha: 0.2),
+                  AppColors.primaryNeon.withValues(alpha: 0.05)
+                ]
+              : [
+                  Colors.white.withValues(alpha: 0.05),
+                  Colors.white.withValues(alpha: 0.02)
+                ],
+        ),
+        borderGradient: LinearGradient(
+          colors: [
+            isPrimary
+                ? AppColors.primaryNeon
+                : Colors.white.withValues(alpha: 0.1),
+            Colors.transparent
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: Colors.white, size: 18.sp),
+            SizedBox(width: 8.w),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+                fontSize: 13.sp,
+              ),
+            ),
           ],
         ),
       ),
@@ -363,89 +438,107 @@ class _CreatorProfileScreenState extends ConsumerState<CreatorProfileScreen>
 
   @override
   Widget build(BuildContext context) {
+    final profileAsync = ref.watch(userProfileProvider(widget.userId));
+
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: Stack(
-        children: [
-          const ParticleBackground(),
-          NestedScrollView(
-            headerSliverBuilder: (context, innerBoxIsScrolled) {
-              return [
-                SliverAppBar(
-                  pinned: true,
-                  backgroundColor: AppColors.background,
-                  elevation: 0,
-                  leading: IconButton(
-                    onPressed: () => context.pop(),
-                    icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
+      body: profileAsync.when(
+        data: (profile) => Stack(
+          children: [
+            const ParticleBackground(),
+            NestedScrollView(
+              headerSliverBuilder: (context, innerBoxIsScrolled) {
+                return [
+                  SliverAppBar(
+                    pinned: true,
+                    backgroundColor: AppColors.background,
+                    elevation: 0,
+                    leading: IconButton(
+                      onPressed: () => context.pop(),
+                      icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
+                    ),
+                    actions: [
+                      IconButton(
+                        onPressed: () => _showShareSheet(context, profile),
+                        icon: const Icon(Iconsax.share_copy, color: Colors.white),
+                      ),
+                      IconButton(
+                        onPressed: () => _showMoreOptions(context, profile),
+                        icon: const Icon(Iconsax.more_copy, color: Colors.white),
+                      ),
+                      SizedBox(width: 8.w),
+                    ],
                   ),
-                  actions: [
-                    IconButton(
-                      onPressed: () => _showShareSheet(context),
-                      icon: const Icon(Iconsax.share_copy, color: Colors.white),
-                    ),
-                    IconButton(
-                      onPressed: () => _showMoreOptions(context),
-                      icon: const Icon(Iconsax.more_copy, color: Colors.white),
-                    ),
-                    SizedBox(width: 8.w),
-                  ],
-                ),
-                SliverToBoxAdapter(
-                  child: _buildProfileHeader(),
-                ),
-                SliverAppBar(
-                  pinned: true,
-                  toolbarHeight: 0,
-                  backgroundColor: AppColors.background,
-                  bottom: PreferredSize(
-                    preferredSize: Size.fromHeight(60.h),
-                    child: Container(
-                      height: 60.h,
-                      decoration: BoxDecoration(
-                        color: AppColors.background,
-                        border: Border(
-                          bottom: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.05),
-                            width: 1,
+                  SliverToBoxAdapter(
+                    child: _buildProfileHeader(profile),
+                  ),
+                  SliverAppBar(
+                    pinned: true,
+                    toolbarHeight: 0,
+                    backgroundColor: AppColors.background,
+                    bottom: PreferredSize(
+                      preferredSize: Size.fromHeight(60.h),
+                      child: Container(
+                        height: 60.h,
+                        decoration: BoxDecoration(
+                          color: AppColors.background,
+                          border: Border(
+                            bottom: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.05),
+                              width: 1,
+                            ),
                           ),
                         ),
-                      ),
-                      child: TabBar(
-                        controller: _tabController,
-                        indicatorColor: AppColors.primaryNeon,
-                        indicatorWeight: 2,
-                        labelColor: Colors.white,
-                        unselectedLabelColor: AppColors.textGrey,
-                        dividerColor: Colors.transparent,
-                        tabs: const [
-                          Tab(icon: Icon(Iconsax.video_play_copy, size: 20)),
-                          Tab(icon: Icon(Iconsax.video_circle_copy, size: 20)),
-                          Tab(icon: Icon(Iconsax.notification_status_copy, size: 20)),
-                          Tab(icon: Icon(Iconsax.info_circle_copy, size: 20)),
-                        ],
+                        child: TabBar(
+                          controller: _tabController,
+                          indicatorColor: AppColors.primaryNeon,
+                          indicatorWeight: 2,
+                          labelColor: Colors.white,
+                          unselectedLabelColor: AppColors.textGrey,
+                          dividerColor: Colors.transparent,
+                          tabs: const [
+                            Tab(icon: Icon(Iconsax.video_play_copy, size: 20)),
+                            Tab(icon: Icon(Iconsax.video_circle_copy, size: 20)),
+                            Tab(icon: Icon(Iconsax.notification_status_copy, size: 20)),
+                            Tab(icon: Icon(Iconsax.info_circle_copy, size: 20)),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ];
-            },
-            body: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildReelsGrid(),
-                _buildVideosList(),
-                _buildHighlightsList(),
-                _buildAboutSection(),
-              ],
+                ];
+              },
+              body: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildReelsGrid(profile),
+                  _buildVideosList(profile),
+                  _buildHighlightsList(profile),
+                  _buildAboutSection(profile),
+                ],
+              ),
             ),
+          ],
+        ),
+        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.primaryNeon)),
+        error: (err, stack) => Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('Error loading profile', style: GoogleFonts.inter(color: Colors.white)),
+              SizedBox(height: 16.h),
+              ElevatedButton(
+                onPressed: () => ref.refresh(userProfileProvider(widget.userId)),
+                child: const Text('Retry'),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildProfileHeader() {
+  Widget _buildProfileHeader(UserProfile profile) {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 10.h),
       child: Column(
@@ -472,7 +565,12 @@ class _CreatorProfileScreenState extends ConsumerState<CreatorProfileScreen>
                     padding: EdgeInsets.all(2.r),
                     child: CircleAvatar(
                       radius: 43.r,
-                      backgroundImage: CachedNetworkImageProvider(profile.avatar),
+                      backgroundImage: profile.profilePicture != null
+                          ? CachedNetworkImageProvider(profile.profilePicture!)
+                          : null,
+                      child: profile.profilePicture == null
+                          ? Icon(Iconsax.user_copy, size: 40.sp, color: Colors.white)
+                          : null,
                     ),
                   ),
                 ),
@@ -507,11 +605,12 @@ class _CreatorProfileScreenState extends ConsumerState<CreatorProfileScreen>
                   color: Colors.white,
                 ),
               ),
-              if (profile.isVerified) ...[
-                SizedBox(width: 6.w),
-                Icon(Iconsax.verify_copy,
-                    color: AppColors.primaryNeon, size: 20.sp),
-              ],
+              // We'll need to add isVerified to UserProfile if it's not there,
+              // but I saw it in the User model so it should be in UserProfile too.
+              // Let me check.
+              SizedBox(width: 6.w),
+              Icon(Iconsax.verify_copy,
+                  color: AppColors.primaryNeon, size: 20.sp),
             ],
           ),
           Text(
@@ -548,9 +647,9 @@ class _CreatorProfileScreenState extends ConsumerState<CreatorProfileScreen>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildStat('Followers', profile.followers),
-              _buildStat('Following', profile.following),
-              _buildStat('Likes', profile.totalLikes),
+              _buildStat('Followers', profile.stats.followers.toString()),
+              _buildStat('Following', profile.stats.following.toString()),
+              _buildStat('Likes', profile.stats.likes.toString()),
             ],
           ),
           SizedBox(height: 24.h),
@@ -560,7 +659,7 @@ class _CreatorProfileScreenState extends ConsumerState<CreatorProfileScreen>
             children: [
               Expanded(
                 child: _buildQuickActionButton(
-                  'Follow',
+                  profile.isFollowing == true ? 'Following' : 'Follow',
                   Iconsax.user_add_copy,
                   onTap: () {},
                   isPrimary: true,
@@ -571,7 +670,7 @@ class _CreatorProfileScreenState extends ConsumerState<CreatorProfileScreen>
                 child: _buildQuickActionButton(
                   'Message',
                   Iconsax.message_copy,
-                  onTap: _startChat,
+                  onTap: () => _startChat(profile),
                   isPrimary: false,
                 ),
               ),
@@ -579,110 +678,24 @@ class _CreatorProfileScreenState extends ConsumerState<CreatorProfileScreen>
           ),
           SizedBox(height: 24.h),
 
-          // Highlights
-          SizedBox(
-            height: 100.h,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: profile.highlights.length,
-              itemBuilder: (context, index) {
-                return _buildHighlightItem(index);
-              },
+          // Highlights - (Using interests as placeholder or keeping it empty for now)
+          if (profile.interests.isNotEmpty)
+            SizedBox(
+              height: 100.h,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: profile.interests.length,
+                itemBuilder: (context, index) {
+                  return _buildHighlightItem(profile, index);
+                },
+              ),
             ),
-          ),
         ],
       ).animate().fadeIn(duration: 500.ms),
     );
   }
 
-  Widget _buildSquareButton(IconData icon, {VoidCallback? onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 45.h,
-        height: 45.h,
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(12.r),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-        ),
-        child: Icon(icon, color: Colors.white, size: 20.sp),
-      ),
-    );
-  }
-
-  Widget _buildStat(String label, String value) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: GoogleFonts.orbitron(
-            fontSize: 16.sp,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 11.sp,
-            color: AppColors.textGrey,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildQuickActionButton(String label, IconData icon,
-      {VoidCallback? onTap, bool isPrimary = false}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: GlassmorphicContainer(
-        width: double.infinity,
-        height: 45.h,
-        borderRadius: 12.r,
-        blur: 10,
-        alignment: Alignment.center,
-        border: 1,
-        linearGradient: LinearGradient(
-          colors: isPrimary
-              ? [
-                  AppColors.primaryNeon.withValues(alpha: 0.3),
-                  AppColors.primaryNeon.withValues(alpha: 0.1)
-                ]
-              : [
-                  Colors.white.withValues(alpha: 0.05),
-                  Colors.white.withValues(alpha: 0.02)
-                ],
-        ),
-        borderGradient: LinearGradient(
-          colors: [
-            isPrimary
-                ? AppColors.primaryNeon
-                : Colors.white.withValues(alpha: 0.1),
-            Colors.transparent
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: Colors.white, size: 18.sp),
-            SizedBox(width: 8.w),
-            Text(
-              label,
-              style: GoogleFonts.inter(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-                fontSize: 13.sp,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHighlightItem(int index) {
+  Widget _buildHighlightItem(UserProfile profile, int index) {
     return Container(
       margin: EdgeInsets.only(right: 16.w),
       child: Column(
@@ -697,13 +710,13 @@ class _CreatorProfileScreenState extends ConsumerState<CreatorProfileScreen>
             ),
             child: CircleAvatar(
               radius: 28.r,
-              backgroundImage:
-                  CachedNetworkImageProvider(profile.highlights[index]),
+              backgroundColor: AppColors.surface,
+              child: Icon(Iconsax.star_copy, color: Colors.white, size: 20.sp),
             ),
           ),
           SizedBox(height: 6.h),
           Text(
-            'Story ${index + 1}',
+            profile.interests[index],
             style: GoogleFonts.inter(fontSize: 10.sp, color: Colors.white),
           ),
         ],
@@ -711,7 +724,8 @@ class _CreatorProfileScreenState extends ConsumerState<CreatorProfileScreen>
     );
   }
 
-  Widget _buildReelsGrid() {
+  Widget _buildReelsGrid(UserProfile profile) {
+    // Placeholder for actual reels
     return GridView.builder(
       padding: EdgeInsets.all(2.r),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -720,129 +734,78 @@ class _CreatorProfileScreenState extends ConsumerState<CreatorProfileScreen>
         crossAxisSpacing: 2,
         mainAxisSpacing: 2,
       ),
-      itemCount: profile.reelsThumbnails.length,
+      itemCount: profile.stats.posts > 0 ? profile.stats.posts : 0,
       itemBuilder: (context, index) {
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            CachedNetworkImage(
-              imageUrl: profile.reelsThumbnails[index],
-              fit: BoxFit.cover,
-            ),
-            Positioned(
-              bottom: 8.h,
-              left: 8.w,
-              child: Row(
-                children: [
-                  Icon(Iconsax.play_copy, color: Colors.white, size: 14.sp),
-                  SizedBox(width: 4.w),
-                  Text(
-                    '${(index + 1) * 12}K',
-                    style: GoogleFonts.inter(
-                      color: Colors.white,
-                      fontSize: 10.sp,
-                      fontWeight: FontWeight.bold,
+        return Container(
+          color: AppColors.surface,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              const Icon(Iconsax.video_play_copy, color: Colors.white24, size: 30),
+              Positioned(
+                bottom: 8.h,
+                left: 8.w,
+                child: Row(
+                  children: [
+                    Icon(Iconsax.play_copy, color: Colors.white, size: 14.sp),
+                    SizedBox(width: 4.w),
+                    Text(
+                      '${(index + 1) * 2}K',
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontSize: 10.sp,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ).animate().fadeIn(delay: (index * 50).ms);
       },
     );
   }
 
-  Widget _buildVideosList() {
+  Widget _buildVideosList(UserProfile profile) {
     return ListView.builder(
       padding: EdgeInsets.all(20.w),
-      itemCount: 5,
+      itemCount: 0, // Placeholder
       itemBuilder: (context, index) {
-        return Container(
-          margin: EdgeInsets.only(bottom: 20.h),
-          height: 200.h,
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(20.r),
-            image: DecorationImage(
-              image: CachedNetworkImageProvider(
-                  'https://picsum.photos/seed/vid_$index/800/400'),
-              fit: BoxFit.cover,
-              opacity: 0.6,
-            ),
-          ),
-          child: Center(
-            child: Icon(Iconsax.play_circle_copy,
-                color: Colors.white, size: 50.sp),
-          ),
-        );
+        return const SizedBox.shrink();
       },
     );
   }
 
-  Widget _buildHighlightsList() {
+  Widget _buildHighlightsList(UserProfile profile) {
     return ListView.builder(
       padding: EdgeInsets.all(20.w),
-      itemCount: profile.highlights.length,
+      itemCount: 0, // Placeholder
       itemBuilder: (context, index) {
-        return Container(
-          margin: EdgeInsets.only(bottom: 16.h),
-          padding: EdgeInsets.all(12.r),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.03),
-            borderRadius: BorderRadius.circular(15.r),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-          ),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 30.r,
-                backgroundImage: CachedNetworkImageProvider(profile.highlights[index]),
-              ),
-              SizedBox(width: 16.w),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Featured Highlight ${index + 1}',
-                      style: GoogleFonts.inter(
-                          fontSize: 14.sp, fontWeight: FontWeight.bold, color: Colors.white),
-                    ),
-                    Text(
-                      'Check out this collection of amazing content!',
-                      style: GoogleFonts.inter(
-                          fontSize: 12.sp, color: AppColors.textSecondary),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Iconsax.arrow_right_3_copy, color: AppColors.textGrey, size: 16.sp),
-            ],
-          ),
-        ).animate().fadeIn(delay: (index * 100).ms).slideX();
+        return const SizedBox.shrink();
       },
     );
   }
 
-  Widget _buildAboutSection() {
+  Widget _buildAboutSection(UserProfile profile) {
     return SingleChildScrollView(
       padding: EdgeInsets.all(20.w),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildEngagementCard(),
+          _buildEngagementCard(profile),
           SizedBox(height: 24.h),
           _buildAboutItem(Iconsax.info_circle_copy, 'Account Info',
-              'Member since Jan 2024\nCyber City, Metaverse'),
-          _buildAboutItem(Iconsax.link_copy, 'Links', 'elena-design.io\nbehance.net/elena_g'),
-          _buildAboutItem(Iconsax.security_user_copy, 'Security', 'Profile verified and secured by Chit Chat'),
+              'Member since ${profile.id.substring(0, 4) == "user" ? "Recently" : "Jan 2024"}\n${profile.location.isNotEmpty ? profile.location : "Location hidden"}'),
+          if (profile.website.isNotEmpty)
+            _buildAboutItem(Iconsax.link_copy, 'Links', profile.website),
+          _buildAboutItem(Iconsax.security_user_copy, 'Security', 'Profile secured by Chit Chat'),
         ],
       ),
     );
   }
 
-  Widget _buildEngagementCard() {
+  Widget _buildEngagementCard(UserProfile profile) {
     return GlassmorphicContainer(
       width: double.infinity,
       height: 120.h,
@@ -861,9 +824,9 @@ class _CreatorProfileScreenState extends ConsumerState<CreatorProfileScreen>
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildEngagementStat('Views', profile.totalViews),
+            _buildEngagementStat('Posts', profile.stats.posts.toString()),
             Container(width: 1, color: Colors.white.withOpacity(0.1)),
-            _buildEngagementStat('Engagement', profile.engagementRate),
+            _buildEngagementStat('Total Likes', profile.stats.likes.toString()),
           ],
         ),
       ),

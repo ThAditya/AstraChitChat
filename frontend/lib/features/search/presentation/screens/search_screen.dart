@@ -13,6 +13,7 @@ import '../../domain/models/search_result.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../chat/domain/models/chat_model.dart';
 import '../../../chat/presentation/providers/social_providers.dart';
+import '../providers/search_provider.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
@@ -23,15 +24,13 @@ class SearchScreen extends ConsumerStatefulWidget {
 
 class _SearchScreenState extends ConsumerState<SearchScreen> {
   final TextEditingController _searchController = TextEditingController();
-  bool _isSearching = false;
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(() {
-      setState(() {
-        _isSearching = _searchController.text.isNotEmpty;
-      });
+      // Update the provider query
+      ref.read(searchQueryProvider.notifier).state = _searchController.text;
     });
   }
 
@@ -41,14 +40,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     super.dispose();
   }
 
-  void _quickMessage(SearchResult user) {
+  void _quickMessage(dynamic user) {
     final chat = ChatModel(
-      id: user.id,
-      name: user.title,
+      id: user['_id'],
+      name: user['name'] ?? user['username'],
       lastMessage: "Started a chat from Explore",
-      avatar: user.imageUrl,
+      avatar: user['profilePicture'] ?? '',
       time: "Just now",
-      isOnline: user.isOnline,
+      isOnline: false, // Defaulting to false for now
     );
 
     ref.read(chatsProvider.notifier).addChat(chat);
@@ -57,14 +56,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final searchQuery = ref.watch(searchQueryProvider);
+    final isSearching = searchQuery.isNotEmpty;
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SafeArea(
         child: Column(
           children: [
-            _buildSearchBar(),
+            _buildSearchBar(isSearching),
             Expanded(
-              child: _isSearching ? _buildPeopleSearchResults() : _buildExploreGrid(),
+              child: isSearching ? _buildPeopleSearchResults() : _buildExploreGrid(),
             ),
           ],
         ),
@@ -72,7 +74,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     );
   }
 
-  Widget _buildSearchBar() {
+  Widget _buildSearchBar(bool isSearching) {
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
       child: Row(
@@ -118,7 +120,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         controller: _searchController,
                         style: GoogleFonts.inter(color: Colors.white, fontSize: 15.sp),
                         decoration: InputDecoration(
-                          hintText: 'Search people to follow...',
+                          hintText: 'Search people or categories...',
                           hintStyle: GoogleFonts.inter(color: Colors.white38, fontSize: 14.sp),
                           border: InputBorder.none,
                           isDense: true,
@@ -126,9 +128,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         ),
                       ),
                     ),
-                    if (_isSearching)
+                    if (isSearching)
                       GestureDetector(
-                        onTap: () => _searchController.clear(),
+                        onTap: () {
+                          _searchController.clear();
+                          ref.read(searchQueryProvider.notifier).state = '';
+                        },
                         child: Container(
                           padding: EdgeInsets.all(4.r),
                           decoration: BoxDecoration(
@@ -188,70 +193,89 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Widget _buildPeopleSearchResults() {
-    final results = mockSearchResults
-        .where((e) => e.type == SearchResultType.user && 
-                     e.title.toLowerCase().contains(_searchController.text.toLowerCase()))
-        .toList();
+    final searchQuery = ref.watch(searchQueryProvider);
+    final searchAsync = ref.watch(searchResultsProvider);
 
-    if (results.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Iconsax.user_search_copy, color: Colors.white24, size: 60.sp),
-            SizedBox(height: 16.h),
-            Text('No people found', style: GoogleFonts.inter(color: Colors.white54)),
-          ],
-        ),
-      );
+    if (searchQuery.isEmpty) {
+      return _buildExploreGrid();
     }
 
-    return ListView.builder(
-      padding: EdgeInsets.symmetric(horizontal: 16.w),
-      itemCount: results.length,
-      itemBuilder: (context, index) {
-        final user = results[index];
-        return ListTile(
-          contentPadding: EdgeInsets.symmetric(vertical: 8.h),
-          leading: CircleAvatar(
-            radius: 25.r,
-            backgroundImage: CachedNetworkImageProvider(user.imageUrl),
-          ),
-          title: Text(
-            user.title,
-            style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-          subtitle: Text(
-            user.subtitle,
-            style: GoogleFonts.inter(color: AppColors.textGrey, fontSize: 13.sp),
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: Icon(Iconsax.message_copy, color: AppColors.primaryNeon, size: 20.sp),
-                onPressed: () => _quickMessage(user),
+    return searchAsync.when(
+      data: (results) {
+        final users = results['users'] ?? [];
+
+        if (users.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Iconsax.user_search_copy, color: Colors.white24, size: 60.sp),
+                SizedBox(height: 16.h),
+                Text('No people found', style: GoogleFonts.inter(color: Colors.white54)),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: EdgeInsets.symmetric(horizontal: 16.w),
+          itemCount: users.length,
+          itemBuilder: (context, index) {
+            final user = users[index];
+            final profilePic = user['profilePicture'];
+
+            return ListTile(
+              contentPadding: EdgeInsets.symmetric(vertical: 8.h),
+              leading: CircleAvatar(
+                radius: 25.r,
+                backgroundImage: profilePic != null && profilePic.isNotEmpty
+                    ? CachedNetworkImageProvider(profilePic)
+                    : null,
+                child: profilePic == null || profilePic.isEmpty
+                    ? Icon(Iconsax.user_copy, color: Colors.white38, size: 24.sp)
+                    : null,
               ),
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryNeon,
-                  borderRadius: BorderRadius.circular(8.r),
-                ),
-                child: Text(
-                  'Follow',
-                  style: GoogleFonts.inter(
-                    color: Colors.black,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12.sp,
+              title: Text(
+                user['username'] ?? 'User',
+                style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+              subtitle: Text(
+                user['name'] ?? '',
+                style: GoogleFonts.inter(color: AppColors.textGrey, fontSize: 13.sp),
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: Icon(Iconsax.message_copy, color: AppColors.primaryNeon, size: 20.sp),
+                    onPressed: () => _quickMessage(user),
                   ),
-                ),
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryNeon,
+                      borderRadius: BorderRadius.circular(8.r),
+                    ),
+                    child: Text(
+                      'Follow',
+                      style: GoogleFonts.inter(
+                        color: Colors.black,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12.sp,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-          onTap: () => context.push(AppRouter.creatorProfile),
-        ).animate().fadeIn().slideX(begin: 0.1);
+              onTap: () => context.push(AppRouter.creatorProfile, extra: user['_id']),
+            ).animate().fadeIn().slideX(begin: 0.1);
+          },
+        );
       },
+      loading: () => const Center(child: CircularProgressIndicator(color: AppColors.primaryNeon)),
+      error: (err, stack) => Center(
+        child: Text('Error: $err', style: GoogleFonts.inter(color: Colors.redAccent)),
+      ),
     );
   }
 }

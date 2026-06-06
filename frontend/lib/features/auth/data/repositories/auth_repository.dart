@@ -49,6 +49,40 @@ class AuthRepository {
     }
   }
 
+  Future<void> forgotPassword(String email) async {
+    try {
+      await _apiClient.dio.post(
+        '/auth/forgot-password',
+        data: {'email': email},
+      );
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to request reset code');
+    }
+  }
+
+  Future<String> verifyResetCode(String email, String code) async {
+    try {
+      final response = await _apiClient.dio.post(
+        '/auth/verify-reset-code',
+        data: {'email': email, 'code': code},
+      );
+      return response.data['resetToken'];
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Invalid or expired code');
+    }
+  }
+
+  Future<void> resetPassword(String resetToken, String password) async {
+    try {
+      await _apiClient.dio.post(
+        '/auth/reset-password',
+        data: {'resetToken': resetToken, 'password': password},
+      );
+    } on DioException catch (e) {
+      throw _handleDioError(e, 'Failed to reset password');
+    }
+  }
+
   String _handleDioError(DioException e, String defaultMessage) {
     if (e.type == DioExceptionType.connectionTimeout ||
         e.type == DioExceptionType.connectionError ||

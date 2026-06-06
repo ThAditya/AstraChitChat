@@ -5,6 +5,9 @@ import '../../features/splash/presentation/screens/splash_screen.dart';
 import '../../features/onboarding/presentation/screens/onboarding_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
+import '../../features/auth/presentation/screens/forgot_password_screen.dart';
+import '../../features/auth/presentation/screens/reset_password_otp_screen.dart';
+import '../../features/auth/presentation/screens/new_password_screen.dart';
 import '../../features/auth/presentation/screens/otp_verification_screen.dart';
 import '../../features/home/presentation/screens/main_screen.dart';
 import '../../features/chat/presentation/screens/chat_list_screen.dart';
@@ -40,6 +43,7 @@ import '../../features/settings/presentation/screens/about_screen.dart';
 import '../../features/settings/presentation/screens/privacy_policy_screen.dart';
 import '../../features/settings/presentation/screens/report_problem_screen.dart';
 import '../../features/profile/presentation/screens/edit_profile_screen.dart';
+import '../../features/profile/presentation/screens/follow_list_screen.dart';
 import '../../features/reels/presentation/screens/upload_reel_screen.dart';
 import '../../features/reels/presentation/screens/live_stream_screen.dart';
 import '../widgets/common_placeholder_screen.dart';
@@ -51,6 +55,9 @@ class AppRouter {
   static const String onboarding = '/onboarding';
   static const String login = '/login';
   static const String register = '/register';
+  static const String forgotPassword = '/forgot-password';
+  static const String resetPasswordOtp = '/reset-password-otp';
+  static const String newPassword = '/new-password';
   static const String otp = '/otp';
   static const String home = '/home';
   static const String chat = '/chat';
@@ -78,6 +85,7 @@ class AppRouter {
   static const String premium = '/premium';
   static const String savedContent = '/saved-content';
   static const String editProfile = '/edit-profile';
+  static const String followList = '/follow-list';
   static const String notificationSettings = '/notification-settings';
   static const String languageSettings = '/language-settings';
   static const String storageManagement = '/storage-management';
@@ -106,6 +114,24 @@ class AppRouter {
       GoRoute(
         path: register,
         builder: (context, state) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: forgotPassword,
+        builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: resetPasswordOtp,
+        builder: (context, state) {
+          final email = state.extra as String;
+          return ResetPasswordOtpScreen(email: email);
+        },
+      ),
+      GoRoute(
+        path: newPassword,
+        builder: (context, state) {
+          final resetToken = (state.extra as Map<String, dynamic>)['resetToken'] as String;
+          return NewPasswordScreen(resetToken: resetToken);
+        },
       ),
       GoRoute(
         path: otp,
@@ -197,7 +223,10 @@ class AppRouter {
       ),
       GoRoute(
         path: creatorProfile,
-        builder: (context, state) => const CreatorProfileScreen(),
+        builder: (context, state) {
+          final userId = state.extra as String;
+          return CreatorProfileScreen(userId: userId);
+        },
       ),
       GoRoute(
         path: search,
@@ -237,6 +266,17 @@ class AppRouter {
       GoRoute(
         path: editProfile,
         builder: (context, state) => const EditProfileScreen(),
+      ),
+      GoRoute(
+        path: followList,
+        builder: (context, state) {
+          final data = state.extra as Map<String, dynamic>;
+          return FollowListScreen(
+            userId: data['userId'],
+            username: data['username'],
+            type: data['type'],
+          );
+        },
       ),
       GoRoute(
         path: notificationSettings,
