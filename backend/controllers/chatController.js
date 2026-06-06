@@ -251,13 +251,25 @@ async function getChatMessages(req, res) {
     );
 
     // ✅ FIX (Bug #6): Update lastReadMsgId and reset unreadCount for the participant
+    // NOTE: Must use separate updates since MongoDB doesn't allow mixing positional $ with array filters $[elem]
     if (messages.length > 0) {
       const mostRecentMessageId = messages[messages.length - 1]._id;  // Last message in chronological order
+      
+      // Update participants.lastReadMsgId using positional operator
       await Chat.updateOne(
         { _id: chatId, 'participants.user': userId },
         { 
           $set: { 
-            'participants.$.lastReadMsgId': mostRecentMessageId,
+            'participants.$.lastReadMsgId': mostRecentMessageId
+          }
+        }
+      );
+      
+      // Update unreadCounts.count using array filter (separate operation)
+      await Chat.updateOne(
+        { _id: chatId },
+        { 
+          $set: { 
             'unreadCounts.$[elem].count': 0  // Reset unread count to 0
           }
         },
@@ -268,8 +280,11 @@ async function getChatMessages(req, res) {
     } else {
       // No messages to read, but still reset unread count
       await Chat.updateOne(
-        { _id: chatId, 'unreadCounts.user': userId },
-        { $set: { 'unreadCounts.$.count': 0 } }
+        { _id: chatId },
+        { $set: { 'unreadCounts.$[elem].count': 0 } },
+        {
+          arrayFilters: [{ 'elem.user': userId }]  // Only update this user's unread count
+        }
       );
     }
 
