@@ -72,13 +72,33 @@ exports.forgotPasswordValidator = Joi.object({
 
 // Reset password validator schema
 exports.resetPasswordValidator = Joi.object({
-  token: Joi.string()
+  resetToken: Joi.string()
     .required()
     .messages({
       'any.required': 'Reset token is required',
     }),
   password: passwordSchema,
 }).unknown(false);
+
+// Verify reset code validator
+exports.verifyResetCodeValidator = Joi.object({
+  email: Joi.string()
+    .lowercase()
+    .email()
+    .required()
+    .messages({
+      'string.email': 'Please provide a valid email address',
+      'any.required': 'Email is required',
+    }),
+  code: Joi.alternatives().try(
+    Joi.string().length(6).pattern(/^\d{6}$/),
+    Joi.number().integer().min(100000).max(999999)
+  ).required()
+    .messages({
+      'alternatives.types': 'Code must be a 6-digit number or string',
+      'any.required': 'Code is required',
+    }),
+}).unknown(true); // Allow unknown fields like deviceId or timestamps from frontend
 
 // Change password validator schema
 exports.changePasswordValidator = Joi.object({

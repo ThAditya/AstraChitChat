@@ -66,7 +66,7 @@ function sanitizePostForResponse(post, userId) {
       authorObj = {
         _id: postObj.author,
         username: 'Unknown User',
-        profilePicture: '',
+        profilePicture: null,
         name: 'Unknown',
       };
     }
@@ -76,7 +76,7 @@ function sanitizePostForResponse(post, userId) {
     authorObj = {
       _id: '',
       username: 'Unknown User',
-      profilePicture: '',
+      profilePicture: null,
       name: 'Unknown',
     };
   }

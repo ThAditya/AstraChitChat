@@ -108,6 +108,10 @@ function findCurrentUserParticipant(chat, userId) {
 async function getChats(req, res) {
   try {
     const userId = req.user._id;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
     // ✅ PRODUCTION FIX: Query both old format (direct ObjectIds) and new format (user field)
     // CRITICAL FIX: Removed 'lastMessage': { $exists: true } filter
     // New chats won't have a lastMessage until first message is sent
@@ -132,7 +136,8 @@ async function getChats(req, res) {
       // 3. Then by createdAt (fallback for truly new empty chats)
       // This ensures empty chats appear in the list after being created
       .sort({ 'lastMessage.createdAt': -1, 'lastActivityTimestamp': -1, 'createdAt': -1 })
-      .limit(20);
+      .skip(skip)
+      .limit(limit);
 
     // Convert to lean objects manually after populate for better control
     const leanChats = chats.map(chat => chat.toObject ? chat.toObject() : chat);
@@ -229,7 +234,7 @@ async function getChatMessages(req, res) {
         _id: msg.quotedMsgId._id,
         bodyText: msg.quotedMsgId.bodyText || '[Media message]',
         msgType: msg.quotedMsgId.msgType || 'text',
-        sender: msg.quotedMsgId.sender ? applyUserDefaults(msg.quotedMsgId.sender) : { _id: '', username: 'Unknown', profilePicture: '' },
+        sender: msg.quotedMsgId.sender ? applyUserDefaults(msg.quotedMsgId.sender) : { _id: '', username: 'Unknown', profilePicture: null },
         mediaUrl: msg.quotedMsgId.mediaUrl
       } : null
     }));
@@ -481,37 +486,24 @@ async function sendMessage(req, res) {
     const { chatId: chatIdParam } = req.params;
     const senderId = req.user._id;
 
-    // ✅ FIX: Support both routes:
-    // - POST / uses receiverId to find/create chat
-    // - POST /:chatId/messages uses chatId directly
     let chatId = chatIdParam;
 
     if (!chatId && !receiverId) {
       return res.status(400).json({ message: 'Either chatId or receiverId is required' });
     }
 
-    // ✅ FIX: Validate attachments structure before storing (matches Message schema: public_id, secure_url, resource_type)
-    const validatedAttachments = (attachments || []).filter(att => {
-      return (
-        att &&
-        typeof att === 'object' &&
-        att.public_id &&
-        typeof att.public_id === 'string' &&
-        att.secure_url &&
-        typeof att.secure_url === 'string' &&
-        att.resource_type &&
-        ['image', 'video', 'audio', 'file'].includes(att.resource_type) &&
-        (!att.size || (typeof att.size === 'number' && att.size <= 50 * 1024 * 1024))  // 50MB limit
-      );
-    });
-
     let chat;
 
     if (chatId) {
       // Route: POST /:chatId/messages - Use existing chat
-      chat = await Chat.findById(chatId);
+      // ✅ SECURITY FIX: Ensure sender is a participant of the chat
+      chat = await Chat.findOne({
+        _id: chatId,
+        'participants.user': senderId
+      });
+
       if (!chat) {
-        return res.status(404).json({ message: 'Chat not found' });
+        return res.status(403).json({ message: 'Chat not found or access denied' });
       }
     } else {
       // Route: POST / - Find or create chat using receiverId
@@ -555,7 +547,7 @@ async function sendMessage(req, res) {
       bodyText: bodyText || '',
       msgType,
       status: 'sent',
-      attachments: validatedAttachments,
+      attachments: attachments, // Validated by Joi
       quotedMsgId: quotedMsgId ? new mongoose.Types.ObjectId(quotedMsgId) : null,
       readBy: [{ user: senderId, readAt: now }],
       deliveredTo: [],
@@ -576,7 +568,7 @@ async function sendMessage(req, res) {
     };
 
     // ✅ FIX: Use chatActivity service instead of manual updatedAt
-    const messageText = bodyText || (validatedAttachments.length ? 'Media' : 'Message');
+    const messageText = bodyText || (attachments.length ? 'Media' : 'Message');
     await updateChatOnNewMessage(chat._id.toString(), message._id.toString(), senderId.toString(), messageText);
 
     res.status(201).json(messageWithDefaults);
@@ -604,8 +596,10 @@ async function markMessageAsRead(req, res) {
 // Mark all messages in chat as read
 async function markAllMessagesAsRead(req, res) {
   try {
-    const { chatId } = req.body;
+    const chatId = req.params.chatId || req.body.chatId;
     const userId = req.user._id;
+
+    if (!chatId) return res.status(400).json({ message: 'Chat ID is required' });
 
     // ✅ FIX: Get the most recent message ID to update lastReadMsgId
     const latestMessage = await Message.findOne({ chat: chatId })
@@ -1034,10 +1028,10 @@ async function clearChat(req, res) {
  * Only recipient (with private key) can decrypt
  * 
  * Body: {
- *   receiverId: string,
  *   encryptedBody: string (base64),
  *   nonce: string (base64),
  *   msgType: string,
+ *   receiverId: string (optional if chatId in URL),
  *   attachments: array,
  *   quotedMsgId: string
  * }
@@ -1045,72 +1039,58 @@ async function clearChat(req, res) {
 async function sendEncryptedMessage(req, res) {
   try {
     const { receiverId, encryptedBody, nonce, msgType = 'text', attachments = [], quotedMsgId } = req.body;
+    const { chatId: chatIdParam } = req.params;
     const senderId = req.user._id;
 
-    // Validate encryption parameters
-    if (!encryptedBody || typeof encryptedBody !== 'string') {
-      return res.status(400).json({ message: 'Invalid encrypted body' });
-    }
+    let chat;
 
-    if (!nonce || typeof nonce !== 'string') {
-      return res.status(400).json({ message: 'Invalid nonce' });
-    }
-
-    // Validate base64 format
-    try {
-      Buffer.from(encryptedBody, 'base64');
-      Buffer.from(nonce, 'base64');
-    } catch (error) {
-      return res.status(400).json({ message: 'Encrypted body and nonce must be valid base64' });
-    }
-
-    // Validate attachments (matches Message schema: public_id, secure_url, resource_type)
-    const validatedAttachments = (attachments || []).filter(att => {
-      return (
-        att &&
-        typeof att === 'object' &&
-        att.public_id &&
-        typeof att.public_id === 'string' &&
-        att.secure_url &&
-        typeof att.secure_url === 'string' &&
-        att.resource_type &&
-        ['image', 'video', 'audio', 'file'].includes(att.resource_type) &&
-        (!att.size || (typeof att.size === 'number' && att.size <= 50 * 1024 * 1024))
-      );
-    });
-
-    // Find or create chat
-    const userIds = [senderId.toString(), receiverId].sort();
-    let chat = await Chat.findOne({
-      convoType: 'direct',
-      'participants.user': { $all: [new mongoose.Types.ObjectId(userIds[0]), new mongoose.Types.ObjectId(userIds[1])] },
-      participants: { $size: 2 }
-    });
-
-    if (!chat) {
-      const now = new Date();
-      chat = new Chat({
-        convoType: 'direct',
-        participants: [
-          { user: new mongoose.Types.ObjectId(userIds[0]), role: 'member', joinedAt: now },
-          { user: new mongoose.Types.ObjectId(userIds[1]), role: 'member', joinedAt: now },
-        ],
-        lastActivityTimestamp: now
+    if (chatIdParam) {
+      // ✅ FIX: Use chatId from URL if provided and verify membership
+      chat = await Chat.findOne({
+        _id: chatIdParam,
+        'participants.user': senderId
       });
-      await chat.save();
+      if (!chat) return res.status(403).json({ message: 'Chat not found or access denied' });
+    } else if (receiverId) {
+      // Route: POST / - Find or create chat using receiverId
+      const userIds = [senderId.toString(), receiverId].sort();
+      chat = await Chat.findOne({
+        convoType: 'direct',
+        'participants.user': { $all: [new mongoose.Types.ObjectId(userIds[0]), new mongoose.Types.ObjectId(userIds[1])] },
+        participants: { $size: 2 }
+      });
+
+      if (!chat) {
+        const now = new Date();
+        chat = new Chat({
+          convoType: 'direct',
+          participants: [
+            { user: new mongoose.Types.ObjectId(userIds[0]), role: 'member', joinedAt: now },
+            { user: new mongoose.Types.ObjectId(userIds[1]), role: 'member', joinedAt: now },
+          ],
+          unreadCounts: [
+            { user: new mongoose.Types.ObjectId(userIds[0]), count: 0 },
+            { user: new mongoose.Types.ObjectId(userIds[1]), count: 0 }
+          ],
+          lastActivityTimestamp: now
+        });
+        await chat.save();
+      }
+    } else {
+      return res.status(400).json({ message: 'Either chatId or receiverId is required' });
     }
 
     const now = new Date();
     const message = new Message({
       sender: senderId,
-      receiver: new mongoose.Types.ObjectId(receiverId),
+      receiver: chat.convoType === 'direct' ? chat.participants.find(p => p.user.toString() !== senderId.toString())?.user : null,
       chat: chat._id,
       encryptedBody: encryptedBody,
       nonce: nonce,
-      bodyText: '[Encrypted Message]',  // Placeholder for unencrypted view
+      bodyText: '[Encrypted Message]',
       msgType,
       status: 'sent',
-      attachments: validatedAttachments,
+      attachments: attachments, // Validated by Joi
       quotedMsgId: quotedMsgId ? new mongoose.Types.ObjectId(quotedMsgId) : null,
       readBy: [{ user: senderId, readAt: now }],
       deliveredTo: [],

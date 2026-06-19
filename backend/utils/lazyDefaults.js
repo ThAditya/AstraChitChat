@@ -49,7 +49,14 @@ function applyUserDefaults(user) {
     });
   }
 
-  return { ...userObj, ...updates };
+  const enriched = { ...userObj, ...updates };
+
+  // Flatten profilePicture if it's an object
+  if (enriched.profilePicture && typeof enriched.profilePicture === 'object') {
+    enriched.profilePicture = enriched.profilePicture.secure_url || null;
+  }
+
+  return enriched;
 }
 
 /**
@@ -62,17 +69,27 @@ function applyUserDefaults(user) {
 function serializeUser(user) {
   if (!user) return null;
 
+  // Ensure profilePicture is flattened (handle case where applyUserDefaults wasn't called)
+  let profilePicture = user.profilePicture;
+  if (profilePicture && typeof profilePicture === 'object') {
+    profilePicture = profilePicture.secure_url || null;
+  }
+
   return {
     _id: user._id,
     name: user.name,
     username: user.username,
     email: user.email,
-    profilePicture: user.profilePicture ?? null,
+    profilePicture: profilePicture ?? null,
     coverPhoto: user.coverPhoto ?? '',
     bio: user.bio ?? '',
     location: user.location ?? '',
     website: user.website ?? '',
     pronouns: user.pronouns ?? '',
+    birthday: user.birthday ?? null,
+    gender: user.gender ?? 'Prefer not to say',
+    interests: user.interests ?? [],
+    socialLinks: user.socialLinks ?? { instagram: '', twitter: '', linkedin: '', facebook: '' },
     isOnline: user.isOnline ?? false,
     lastSeen: user.lastSeen ?? null,
     isPrivate: user.isPrivate ?? false,

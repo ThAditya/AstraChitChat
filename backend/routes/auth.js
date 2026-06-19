@@ -2,7 +2,20 @@ const express = require('express');
 const router = express.Router();
 
 console.log('✅ Auth routes loaded');
-const { registerUser, loginUser, setup2FA, verify2FASetup, disable2FA, verifyLogin2FA, logoutUser, refreshAccessToken, logoutAllDevices } = require('../controllers/authController');
+const {
+  registerUser,
+  loginUser,
+  setup2FA,
+  verify2FASetup,
+  disable2FA,
+  verifyLogin2FA,
+  logoutUser,
+  refreshAccessToken,
+  logoutAllDevices,
+  forgotPassword,
+  verifyResetCode,
+  resetPassword,
+} = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
 const { validateRequest } = require('../middleware/validateRequest');
 const {
@@ -12,6 +25,9 @@ const {
   disable2FAValidator,
   verifyLogin2FAValidator,
   refreshTokenValidator,
+  forgotPasswordValidator,
+  verifyResetCodeValidator,
+  resetPasswordValidator,
 } = require('../validators/authValidators');
 
 // @route   POST /api/auth/register
@@ -21,6 +37,18 @@ router.post('/register', validateRequest({ bodySchema: registerValidator }), reg
 // @route   POST /api/auth/login
 // @desc    Authenticate user & get token
 router.post('/login', validateRequest({ bodySchema: loginValidator }), loginUser);
+
+// @route   POST /api/auth/forgot-password
+// @desc    Forgot password - request 6-digit reset code
+router.post('/forgot-password', validateRequest({ bodySchema: forgotPasswordValidator }), forgotPassword);
+
+// @route   POST /api/auth/verify-reset-code
+// @desc    Verify 6-digit reset code
+router.post('/verify-reset-code', validateRequest({ bodySchema: verifyResetCodeValidator }), verifyResetCode);
+
+// @route   POST /api/auth/reset-password
+// @desc    Reset password using reset token
+router.post('/reset-password', validateRequest({ bodySchema: resetPasswordValidator }), resetPassword);
 
 // @route   POST /api/auth/logout
 // @desc    Logout user

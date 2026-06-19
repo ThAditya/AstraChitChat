@@ -1,5 +1,6 @@
 const Comment = require('../models/Comment');
 const Post = require('../models/Post');
+const { applyUserDefaults } = require('../utils/lazyDefaults');
 
 // @desc    Add a comment to a post
 // @route   POST /api/posts/:postId/comments
@@ -30,9 +31,14 @@ const addComment = async (req, res) => {
     // Populate user details
     await comment.populate('user', 'name username profilePicture');
 
+    const commentObj = comment.toObject();
+    if (commentObj.user) {
+      commentObj.user = applyUserDefaults(commentObj.user);
+    }
+
     res.status(201).json({
       message: 'Comment added successfully',
-      comment
+      comment: commentObj
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error: could not add comment', error: error.message });
@@ -50,7 +56,15 @@ const getPostComments = async (req, res) => {
       .populate('user', 'name username profilePicture')
       .sort({ createdAt: -1 }); // Most recent first
 
-    res.json({ comments, count: comments.length });
+    const enrichedComments = comments.map(comment => {
+      const commentObj = comment.toObject();
+      if (commentObj.user) {
+        commentObj.user = applyUserDefaults(commentObj.user);
+      }
+      return commentObj;
+    });
+
+    res.json({ comments: enrichedComments, count: enrichedComments.length });
   } catch (error) {
     res.status(500).json({ message: 'Server error: could not fetch comments', error: error.message });
   }
@@ -135,11 +149,19 @@ const getCommentViews = async (req, res) => {
       return res.status(404).json({ message: 'Comment not found' });
     }
 
+    const viewers = (comment.viewers || []).map(v => {
+      const vObj = v.toObject ? v.toObject() : v;
+      if (vObj.userId) {
+        vObj.userId = applyUserDefaults(vObj.userId);
+      }
+      return vObj;
+    });
+
     res.json({
       commentId,
       viewCount: comment.viewCount,
-      viewers: comment.viewers,
-      totalViewers: comment.viewers.length
+      viewers,
+      totalViewers: viewers.length
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error: could not fetch views', error: error.message });
